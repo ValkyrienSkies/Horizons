@@ -13,7 +13,7 @@ import net.minecraftforge.registries.RegistryObject
 import org.valkyrienskies.mod.api.vsApi
 import org.valkyrienskies.horizons.client.HorizonsModClient
 
-@Mod("vs_template")
+@Mod("horizons")
 class HorizonsMod {
 
     //Deferred Registries
@@ -43,7 +43,7 @@ class HorizonsMod {
     }
 
     companion object {
-        const val MOD_ID = "vs_template"
+        const val MOD_ID = "horizons"
         @JvmStatic
         fun init (event: FMLCommonSetupEvent) {
             // Put anything initialized on forge-side here.
