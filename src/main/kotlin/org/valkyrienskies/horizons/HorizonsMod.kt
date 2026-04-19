@@ -10,8 +10,7 @@ import net.minecraftforge.fml.loading.FMLEnvironment
 import net.minecraftforge.registries.DeferredRegister
 import net.minecraftforge.registries.ForgeRegistries
 import net.minecraftforge.registries.RegistryObject
-import org.valkyrienskies.mod.api.vsApi
-import org.valkyrienskies.horizons.client.HorizonsModClient
+import org.valkyrienskies.horizons.content.client.HorizonsModClient
 
 @Mod("horizons")
 class HorizonsMod {

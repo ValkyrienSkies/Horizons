@@ -1,4 +1,4 @@
-package org.valkyrienskies.horizons.client
+package org.valkyrienskies.horizons.content.client
 
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent
 
