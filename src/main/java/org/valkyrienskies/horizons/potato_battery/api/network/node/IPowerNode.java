@@ -1,6 +1,7 @@
 package org.valkyrienskies.horizons.potato_battery.api.network.node;
 
 import org.valkyrienskies.horizons.potato_battery.api.network.Connection;
+import org.valkyrienskies.horizons.potato_battery.api.network.CircuitStampContext;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -25,6 +26,8 @@ public interface IPowerNode {
    */
   @Nullable
   Connection addConnection(IPowerNode node, int port, int otherPort);
+  @Nullable
+  Connection addConnection(IPowerNode node, int port, int otherPort, double resistance);
   /**
    * Adds a connection between this node and the specified node.
    * @param connection The connection to add.
@@ -92,23 +95,9 @@ public interface IPowerNode {
   boolean isConnected(IPowerNode node, int port);
   boolean isConnected(IPowerNode node, int port, int otherPort);
 
-  //PROPERTIES
-  double getResistance();
-  double getConductivity();
-  double getCapacitance();
-  double getInductance();
+  int getVoltageSourceCount();
 
-  /**
-   * Gets the source of the current at the specified port. If the port is not a source, it returns 0.
-   * @param port The port to get the current source of.
-   * @return The current source of the specified port, or 0 if the port is not a source.
-   */
-  double getCurrentSource(int port);
-
-  //CONNECTION HELPERS
-
-  double getResistanceOver(IPowerNode node, int port, int otherPort);
-  double getResistanceOver(Connection connection, int port);
+  void stamp(CircuitStampContext context);
 
 
   //EVENTS

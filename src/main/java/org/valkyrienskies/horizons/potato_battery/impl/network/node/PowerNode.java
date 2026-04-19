@@ -25,7 +25,13 @@ public abstract class PowerNode implements IPowerNode {
   @Override
   @Nullable
   public Connection addConnection(IPowerNode node, int port, int otherPort) {
-    return this.addConnection(new Connection(node, otherPort), port);
+    return this.addConnection(node, port, otherPort, 1.0e-6);
+  }
+
+  @Override
+  @Nullable
+  public Connection addConnection(IPowerNode node, int port, int otherPort, double resistance) {
+    return this.addConnection(new Connection(node, otherPort, resistance), port);
   }
 
   @Override
@@ -90,23 +96,12 @@ public abstract class PowerNode implements IPowerNode {
   }
 
   @Override
-  public double getResistance() {
+  public int getVoltageSourceCount() {
     return 0;
   }
 
   @Override
-  public double getConductivity() {
-    return 0;
-  }
-
-  @Override
-  public double getCapacitance() {
-    return 0;
-  }
-
-  @Override
-  public double getInductance() {
-    return 0;
+  public void stamp(org.valkyrienskies.horizons.potato_battery.api.network.CircuitStampContext context) {
   }
 
   @Override

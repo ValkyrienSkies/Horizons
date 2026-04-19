@@ -2,20 +2,22 @@ package org.valkyrienskies.horizons.potato_battery.api;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
-import org.joml.Vector3dc;
-import org.joml.Vector3ic;
 import org.valkyrienskies.core.api.world.PhysLevel;
-import org.valkyrienskies.horizons.potato_battery.api.network.Connection;
 import org.valkyrienskies.horizons.potato_battery.api.network.IPBSolver;
+import org.valkyrienskies.horizons.potato_battery.api.network.NodeEnergyData;
 import org.valkyrienskies.horizons.potato_battery.api.network.node.IPowerNode;
 
 import javax.annotation.Nullable;
-import java.util.Map;
+import java.util.Collection;
 
 public interface IPowerNetwork<T extends Level> {
+  double DEFAULT_TIME_STEP = 1.0 / 20.0;
+
   IPBSolver getSolver();
-  T getLevel();
-  PhysLevel getPhysLevel();
+  @Nullable T getLevel();
+  @Nullable PhysLevel getPhysLevel();
+  Collection<IPowerNode> getNodes();
+  double getTimeStepSeconds();
 
   void addNode(BlockPos pos, IPowerNode node);
   void removeNode(BlockPos pos);
@@ -35,6 +37,14 @@ public interface IPowerNetwork<T extends Level> {
    * @return The current over the connection, or 0 if the connection is not valid.
    */
   double getCurrentOver(IPowerNode nodeA, @Nullable IPowerNode nodeB, int port, int otherPort);
+
+  double getVoltageAt(IPowerNode node, int port);
+
+  NodeEnergyData getNodeEnergyData(IPowerNode node, int port);
+
+  void setNodeEnergyData(IPowerNode node, int port, NodeEnergyData energyData);
+
+  void clearNodeEnergyData();
 
   void sync();
 }
