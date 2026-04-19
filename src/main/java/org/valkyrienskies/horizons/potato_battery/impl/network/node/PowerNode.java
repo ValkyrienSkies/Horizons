@@ -1,6 +1,121 @@
 package org.valkyrienskies.horizons.potato_battery.impl.network.node;
 
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import org.valkyrienskies.horizons.potato_battery.api.network.Connection;
 import org.valkyrienskies.horizons.potato_battery.api.network.node.IPowerNode;
 
-public final class PowerNode implements IPowerNode {
+import javax.annotation.Nullable;
+import java.util.HashSet;
+import java.util.List;
+
+public abstract class PowerNode implements IPowerNode {
+
+  private final int ports;
+  private final Long2ObjectOpenHashMap<HashSet<Connection>> connections;
+
+  public PowerNode(int ports) {
+    this.ports = ports;
+    this.connections = new Long2ObjectOpenHashMap<>(ports);
+  }
+
+  public int getPorts() {
+    return ports;
+  }
+
+  @Override
+  @Nullable
+  public Connection addConnection(IPowerNode node, int port, int otherPort) {
+    return this.addConnection(new Connection(node, otherPort), port);
+  }
+
+  @Override
+  @Nullable
+  public Connection addConnection(Connection connection, int port) {
+    return this.connections.computeIfAbsent(port, k -> new HashSet<>()).add(connection) ? connection : null;
+  }
+
+  @Override
+  public boolean removeConnection(IPowerNode node, int port, int otherPort) {
+    return this.connections.get(port) != null && this.connections.get(port).remove(new Connection(node, otherPort));
+  }
+
+  @Override
+  public boolean removeConnection(Connection connection, int port) {
+    return this.connections.get(port) != null && this.connections.get(port).remove(connection);
+  }
+
+  @Override
+  public void removeAllConnections(int port) {
+    this.connections.remove(port);
+  }
+
+  @Override
+  public void removeAllConnections() {
+    this.connections.clear();
+  }
+
+  @Override
+  public boolean canConnect(IPowerNode node, int port, int otherPort) {
+    return true;
+  }
+
+  @Override
+  public boolean canConnect(Connection connection, int port) {
+    return true;
+  }
+
+  @Override
+  public List<Connection> getConnections() {
+    return connections.values().stream().flatMap(HashSet::stream).toList();
+  }
+
+  @Override
+  public List<Connection> getConnections(int port) {
+    return connections.get(port) == null ? List.of() : connections.get(port).stream().toList();
+  }
+
+  @Override
+  public boolean isConnected(IPowerNode node) {
+    return connections.values().stream().flatMap(HashSet::stream).anyMatch(c -> c.node().equals(node));
+  }
+
+  @Override
+  public boolean isConnected(IPowerNode node, int port) {
+    return connections.get(port) != null && connections.get(port).stream().anyMatch(c -> c.node().equals(node));
+  }
+
+  @Override
+  public boolean isConnected(IPowerNode node, int port, int otherPort) {
+    return connections.get(port) != null && connections.get(port).stream().anyMatch(c -> c.node().equals(node) && c.port() == otherPort);
+  }
+
+  @Override
+  public double getResistance() {
+    return 0;
+  }
+
+  @Override
+  public double getConductivity() {
+    return 0;
+  }
+
+  @Override
+  public double getCapacitance() {
+    return 0;
+  }
+
+  @Override
+  public double getInductance() {
+    return 0;
+  }
+
+  @Override
+  public void onAdded() {
+
+  }
+
+  @Override
+  public void onRemoved() {
+
+  }
 }
