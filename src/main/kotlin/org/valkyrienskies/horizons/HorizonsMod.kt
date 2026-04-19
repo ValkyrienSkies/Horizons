@@ -1,4 +1,4 @@
-package org.valkyrienskies.vs_template
+package org.valkyrienskies.horizons
 
 import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.Item
@@ -11,10 +11,10 @@ import net.minecraftforge.registries.DeferredRegister
 import net.minecraftforge.registries.ForgeRegistries
 import net.minecraftforge.registries.RegistryObject
 import org.valkyrienskies.mod.api.vsApi
-import org.valkyrienskies.vs_template.client.VSTemplateModForgeClient
+import org.valkyrienskies.horizons.client.HorizonsModClient
 
 @Mod("vs_template")
-class VSTemplateModForge {
+class HorizonsMod {
 
     //Deferred Registries
     private val BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, MOD_ID)
@@ -31,7 +31,7 @@ class VSTemplateModForge {
 
         modEventBus.addListener(::init)
         if (FMLEnvironment.dist.isClient) {
-            modEventBus.addListener(VSTemplateModForgeClient.Companion::clientInit)
+            modEventBus.addListener(HorizonsModClient.Companion::clientInit)
         }
     }
 
@@ -47,9 +47,8 @@ class VSTemplateModForge {
         @JvmStatic
         fun init (event: FMLCommonSetupEvent) {
             // Put anything initialized on forge-side here.
-            vsApi.physTickEvent.on {
-                println("sex")
-            }
+            //vsApi.physTickEvent.on {
+            //}
         }
     }
 }

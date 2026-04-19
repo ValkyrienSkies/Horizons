@@ -1,8 +1,8 @@
-package org.valkyrienskies.vs_template.client
+package org.valkyrienskies.horizons.client
 
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent
 
-class VSTemplateModForgeClient {
+class HorizonsModClient {
     companion object {
         @JvmStatic
         fun clientInit(event: FMLClientSetupEvent) {
