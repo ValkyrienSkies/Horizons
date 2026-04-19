@@ -198,3 +198,23 @@ tasks.withType(JavaCompile).configureEach {
 test {
     useJUnitPlatform()
 }
+
+tasks.register("runPowerNetworkVisualizer", JavaExec) {
+    group = "verification"
+    description = "Launch the manual potato battery network visualizer"
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "org.valkyrienskies.horizons.potato_battery.PowerNetworkVisualizer"
+
+    def solverName = (project.findProperty("powerSolver") ?: "jklu").toString()
+    systemProperty "power.solver", solverName
+}
+
+tasks.register("runRLCCircuitVisualizer", JavaExec) {
+    group = "verification"
+    description = "Launch the manual RLC circuit visualizer"
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "org.valkyrienskies.horizons.potato_battery.RLCCircuitVisualizer"
+
+    def solverName = (project.findProperty("powerSolver") ?: "jklu").toString()
+    systemProperty "power.solver", solverName
+}
