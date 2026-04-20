@@ -14,6 +14,8 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 abstract class AbstractStampingSolver implements IPBSolver {
   private static final int MAX_NONLINEAR_ITERATIONS = 80;
@@ -23,10 +25,17 @@ abstract class AbstractStampingSolver implements IPBSolver {
   private static final double MIN_CURRENT_SCALE = 1.0e-3;
   private static final double MAX_RELATIVE_VOLTAGE_STEP = 0.75;
   private static final double MAX_RELATIVE_CURRENT_STEP = 1.5;
+  private final Map<IPowerNetwork<?>, CachedTopologyEntry> topologyCache = new WeakHashMap<>();
 
   @Override
   public void step(IPowerNetwork<?> network, int subSteps) {
     runStep(network, subSteps, null);
+  }
+
+  final StepSolveFeedback stepWithFeedback(IPowerNetwork<?> network, int subSteps) {
+    StepFeedbackAccumulator accumulator = new StepFeedbackAccumulator();
+    runStep(network, subSteps, accumulator);
+    return accumulator.finish();
   }
 
   final StepPhaseStats benchmarkStep(IPowerNetwork<?> network, int subSteps) {
@@ -35,7 +44,7 @@ abstract class AbstractStampingSolver implements IPBSolver {
     return accumulator.finish();
   }
 
-  private void runStep(IPowerNetwork<?> network, int subSteps, StepPhaseAccumulator accumulator) {
+  private void runStep(IPowerNetwork<?> network, int subSteps, StepAccumulator accumulator) {
     Collection<IPowerNode> nodes = network.getNodes();
     if (nodes.isEmpty()) {
       network.clearNodeEnergyData();
@@ -43,18 +52,18 @@ abstract class AbstractStampingSolver implements IPBSolver {
     }
 
     long topologyStart = accumulator == null ? 0L : System.nanoTime();
-    SolveTopology topology = SolveTopology.build(nodes);
-    if (accumulator != null) {
-      accumulator.topologyNanos += System.nanoTime() - topologyStart;
-      accumulator.nodeCount = topology.nodeTopologies.size();
-      accumulator.branchCount = topology.branches.size();
-      accumulator.unknownCount = topology.totalUnknowns;
+    SolveTopology topology = getOrBuildTopology(network, nodes);
+    if (accumulator instanceof StepPhaseAccumulator phaseAccumulator) {
+      phaseAccumulator.topologyNanos += System.nanoTime() - topologyStart;
+      phaseAccumulator.nodeCount = topology.nodeTopologies.size();
+      phaseAccumulator.branchCount = topology.branches.size();
+      phaseAccumulator.unknownCount = topology.totalUnknowns;
     }
     if (topology.totalUnknowns == 0) {
       long writeBackStart = accumulator == null ? 0L : System.nanoTime();
       writeBackWithoutSolve(network, topology);
-      if (accumulator != null) {
-        accumulator.writeBackNanos += System.nanoTime() - writeBackStart;
+      if (accumulator instanceof StepPhaseAccumulator phaseAccumulator) {
+        phaseAccumulator.writeBackNanos += System.nanoTime() - writeBackStart;
       }
       return;
     }
@@ -69,15 +78,15 @@ abstract class AbstractStampingSolver implements IPBSolver {
       if (solution == null) {
         long writeBackStart = accumulator == null ? 0L : System.nanoTime();
         writeBackWithoutSolve(network, topology);
-        if (accumulator != null) {
-          accumulator.writeBackNanos += System.nanoTime() - writeBackStart;
+        if (accumulator instanceof StepPhaseAccumulator phaseAccumulator) {
+          phaseAccumulator.writeBackNanos += System.nanoTime() - writeBackStart;
         }
         return;
       }
       long writeBackStart = accumulator == null ? 0L : System.nanoTime();
       writeBack(network, topology, solution);
-      if (accumulator != null) {
-        accumulator.writeBackNanos += System.nanoTime() - writeBackStart;
+      if (accumulator instanceof StepPhaseAccumulator phaseAccumulator) {
+        phaseAccumulator.writeBackNanos += System.nanoTime() - writeBackStart;
       }
       for (NodeTopology nodeTopology : topology.nodeTopologies) {
         nodeTopology.node.onSubstepComplete(network, timeStep);
@@ -87,11 +96,27 @@ abstract class AbstractStampingSolver implements IPBSolver {
 
   protected abstract double[] solveLinearSystem(MatrixAccumulator matrix, double[] rhs);
 
+  private SolveTopology getOrBuildTopology(IPowerNetwork<?> network, Collection<IPowerNode> nodes) {
+    if (network instanceof TopologyCacheableNetwork cacheableNetwork) {
+      CachedTopologyEntry cached = topologyCache.get(network);
+      long revision = cacheableNetwork.getTopologyRevision();
+      if (cached != null && cached.revision == revision) {
+        return cached.topology;
+      }
+
+      SolveTopology topology = SolveTopology.build(nodes);
+      topologyCache.put(network, new CachedTopologyEntry(revision, topology));
+      return topology;
+    }
+
+    return SolveTopology.build(nodes);
+  }
+
   private double[] solveNonlinearSystem(
       IPowerNetwork<?> network,
       SolveTopology topology,
       double timeStep,
-      StepPhaseAccumulator accumulator
+      StepAccumulator accumulator
   ) {
     double[] guess = createInitialGuess(network, topology);
 
@@ -111,14 +136,14 @@ abstract class AbstractStampingSolver implements IPBSolver {
       for (NodeTopology nodeTopology : topology.nodeTopologies) {
         nodeTopology.node.stamp(new StampContextImpl(nodeTopology, matrix, rhs, timeStep, guess));
       }
-      if (accumulator != null) {
-        accumulator.stampNanos += System.nanoTime() - stampStart;
+      if (accumulator instanceof StepPhaseAccumulator phaseAccumulator) {
+        phaseAccumulator.stampNanos += System.nanoTime() - stampStart;
       }
 
       long solveStart = accumulator == null ? 0L : System.nanoTime();
       double[] candidate = solveLinearSystem(matrix, rhs.clone());
-      if (accumulator != null) {
-        accumulator.solveNanos += System.nanoTime() - solveStart;
+      if (accumulator instanceof StepPhaseAccumulator phaseAccumulator) {
+        phaseAccumulator.solveNanos += System.nanoTime() - solveStart;
       }
       if (candidate == null || !isFinite(candidate)) {
         return null;
@@ -142,7 +167,34 @@ abstract class AbstractStampingSolver implements IPBSolver {
       guess = dampStep(guess, candidate, topology);
     }
 
+    if (accumulator != null) {
+      accumulator.iterationLimitHit = true;
+    }
     return guess;
+  }
+
+  static final class StepSolveFeedback {
+    private final int nonlinearIterations;
+    private final int substeps;
+    private final boolean iterationLimitHit;
+
+    private StepSolveFeedback(int nonlinearIterations, int substeps, boolean iterationLimitHit) {
+      this.nonlinearIterations = nonlinearIterations;
+      this.substeps = substeps;
+      this.iterationLimitHit = iterationLimitHit;
+    }
+
+    public int nonlinearIterations() {
+      return nonlinearIterations;
+    }
+
+    public int substeps() {
+      return substeps;
+    }
+
+    public boolean iterationLimitHit() {
+      return iterationLimitHit;
+    }
   }
 
   static final class StepPhaseStats {
@@ -219,16 +271,26 @@ abstract class AbstractStampingSolver implements IPBSolver {
     }
   }
 
-  private static final class StepPhaseAccumulator {
+  private abstract static class StepAccumulator {
+    protected int nonlinearIterations;
+    protected int substeps;
+    protected boolean iterationLimitHit;
+  }
+
+  private static final class StepFeedbackAccumulator extends StepAccumulator {
+    private StepSolveFeedback finish() {
+      return new StepSolveFeedback(nonlinearIterations, substeps, iterationLimitHit);
+    }
+  }
+
+  private static final class StepPhaseAccumulator extends StepAccumulator {
     private long topologyNanos;
     private long stampNanos;
     private long solveNanos;
     private long writeBackNanos;
-    private int nonlinearIterations;
     private int nodeCount;
     private int branchCount;
     private int unknownCount;
-    private int substeps;
 
     private StepPhaseStats finish() {
       return new StepPhaseStats(
@@ -244,6 +306,8 @@ abstract class AbstractStampingSolver implements IPBSolver {
       );
     }
   }
+
+  private record CachedTopologyEntry(long revision, SolveTopology topology) {}
 
   private static double[] createInitialGuess(IPowerNetwork<?> network, SolveTopology topology) {
     double[] guess = new double[topology.totalUnknowns];

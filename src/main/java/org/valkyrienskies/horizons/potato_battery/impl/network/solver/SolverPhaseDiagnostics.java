@@ -7,6 +7,15 @@ public final class SolverPhaseDiagnostics {
   private SolverPhaseDiagnostics() {
   }
 
+  public static SolveFeedback stepWithFeedback(IPBSolver solver, IPowerNetwork<?> network, int subSteps) {
+    if (!(solver instanceof AbstractStampingSolver stampingSolver)) {
+      solver.step(network, subSteps);
+      return new SolveFeedback(0, Math.max(subSteps, 1), false);
+    }
+    AbstractStampingSolver.StepSolveFeedback feedback = stampingSolver.stepWithFeedback(network, subSteps);
+    return new SolveFeedback(feedback.nonlinearIterations(), feedback.substeps(), feedback.iterationLimitHit());
+  }
+
   public static PhaseBenchmarkResult benchmarkStep(IPBSolver solver, IPowerNetwork<?> network, int subSteps) {
     if (!(solver instanceof AbstractStampingSolver stampingSolver)) {
       throw new IllegalArgumentException("Unsupported solver type for phase diagnostics: " + solver.getClass().getName());
@@ -37,5 +46,11 @@ public final class SolverPhaseDiagnostics {
       int unknownCount,
       int substeps,
       long totalMeasuredNanos
+  ) {}
+
+  public record SolveFeedback(
+      int nonlinearIterations,
+      int substeps,
+      boolean iterationLimitHit
   ) {}
 }

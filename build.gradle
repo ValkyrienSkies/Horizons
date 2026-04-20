@@ -287,3 +287,17 @@ tasks.register("runSolverPhaseBenchmarkDiagnostics", JavaExec) {
         systemProperty "power.benchmark.iterations", project.property("benchmarkIterations").toString()
     }
 }
+
+tasks.register("runAstableSolveBenchmarkDiagnostics", JavaExec) {
+    group = "verification"
+    description = "Benchmark the astable multivibrator solve path and substep cost"
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "org.valkyrienskies.horizons.potato_battery.AstableSolveBenchmarkDiagnostics"
+
+    def solverName = (project.findProperty("powerSolver") ?: "all").toString()
+    systemProperty "power.solver", solverName
+    if (project.hasProperty("benchmarkIterations")) {
+        systemProperty "power.benchmark.iterations", project.property("benchmarkIterations").toString()
+    }
+}
