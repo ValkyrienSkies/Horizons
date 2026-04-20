@@ -64,6 +64,7 @@ public final class PongExtremeCircuitVisualizer {
   private PongExtremeCircuitVisualizer() {}
   public static void main(String[] args) { CircuitVisualizer.launch(new Scene()); }
   private static double c01(double v) { return Math.max(0.0, Math.min(1.0, v)); }
+  private static double mapBallDisplayX(double logicalX) { return PM + logicalX * (1.0 - 2.0 * PM); }
 
   private static final class Scene implements Scenario {
     private final VariableVoltageNode leftManual = new VariableVoltageNode(), leftAiEnable = new VariableVoltageNode(), resetTrigger = new VariableVoltageNode(), rc = new VariableVoltageNode();
@@ -318,7 +319,8 @@ public final class PongExtremeCircuitVisualizer {
       int paddleRadius = Math.max(2, (int)Math.ceil(PH * (VY - 1) * 0.5));
       int leftY = Math.max(0, Math.min(VY - 1, (int)Math.round(lpy * (VY - 1))));
       int rightY = Math.max(0, Math.min(VY - 1, (int)Math.round(rpy * (VY - 1))));
-      int ballX = Math.max(0, Math.min(HX - 1, (int)Math.round(bx * (HX - 1))));
+      double displayBallX = mapBallDisplayX(bx);
+      int ballX = Math.max(0, Math.min(HX - 1, (int)Math.round(displayBallX * (HX - 1))));
       int ballY = Math.max(0, Math.min(VY - 1, (int)Math.round(by * (VY - 1))));
       int netX = HX / 2;
       for (int y = 0; y < VY; y++) {
@@ -370,6 +372,7 @@ public final class PongExtremeCircuitVisualizer {
   private static final class AudioSink {
     private final SourceDataLine line;
     private final byte[] frame;
+    private double previousInputSample;
     private double filteredSample;
     private double limitedSample;
     private AudioSink() {
@@ -388,8 +391,11 @@ public final class PongExtremeCircuitVisualizer {
       if (line == null) return;
       double normalized = Double.isFinite(level) ? level / AUDIO_MAX_VOLTS : 0.0;
       normalized = Math.max(-1.0, Math.min(1.0, normalized));
+      int sampleCount = Math.max(1, frame.length / 2);
       for (int i = 0; i < frame.length; i += 2) {
-        filteredSample += (normalized - filteredSample) * AUDIO_LOWPASS_ALPHA;
+        double t = (i / 2.0 + 1.0) / sampleCount;
+        double interpolated = previousInputSample + (normalized - previousInputSample) * t;
+        filteredSample += (interpolated - filteredSample) * AUDIO_LOWPASS_ALPHA;
         double delta = filteredSample - limitedSample;
         if (delta > AUDIO_MAX_SLEW_PER_SAMPLE) delta = AUDIO_MAX_SLEW_PER_SAMPLE;
         else if (delta < -AUDIO_MAX_SLEW_PER_SAMPLE) delta = -AUDIO_MAX_SLEW_PER_SAMPLE;
@@ -399,10 +405,12 @@ public final class PongExtremeCircuitVisualizer {
         frame[i] = (byte)(sample & 0xFF);
         frame[i + 1] = (byte)((sample >>> 8) & 0xFF);
       }
+      previousInputSample = normalized;
       line.write(frame, 0, frame.length);
     }
     void reset() {
       if (line != null) line.flush();
+      previousInputSample = 0.0;
       filteredSample = 0.0;
       limitedSample = 0.0;
     }
