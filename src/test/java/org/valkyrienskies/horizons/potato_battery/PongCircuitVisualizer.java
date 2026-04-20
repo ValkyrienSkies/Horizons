@@ -26,13 +26,18 @@ import java.util.List;
 
 public final class PongCircuitVisualizer {
   private static final double SUPPLY_VOLTAGE = 5.0;
+  private static final double TIME_STEP = 1.0 / 120.0;
   private static final double PADDLE_HEIGHT = 0.17;
   private static final double PADDLE_MARGIN = 0.06;
   private static final double BALL_SIZE = 0.024;
   private static final double BASE_BALL_SPEED_X = 0.55;
   private static final double BASE_BALL_SPEED_Y = 0.35;
   private static final double PADDLE_SPEED = 1.25;
+  private static final double SERVE_TIME_SECONDS = 0.65;
   private static final int WIN_SCORE = 11;
+
+  private PongCircuitVisualizer() {
+  }
 
   public static void main(String[] args) {
     CircuitVisualizer.launch(new PongScenario());
@@ -43,20 +48,24 @@ public final class PongCircuitVisualizer {
   }
 
   private static final class PongScenario implements Scenario {
-    private static final double TIME_STEP = 1.0 / 120.0;
-
     private final VariableVoltageNode leftControl = new VariableVoltageNode();
     private final VariableVoltageNode rightControl = new VariableVoltageNode();
     private final GroundNode ground = new GroundNode();
-    private final PaddleNode leftPaddle = new PaddleNode();
-    private final PaddleNode rightPaddle = new PaddleNode();
-    private final BallNode ball = new BallNode();
+
+    private final PaddleRegisterNode leftPaddle = new PaddleRegisterNode();
+    private final PaddleRegisterNode rightPaddle = new PaddleRegisterNode();
+    private final ServeTimerNode serveTimer = new ServeTimerNode();
+    private final ScoreCounterNode leftScore = new ScoreCounterNode();
+    private final ScoreCounterNode rightScore = new ScoreCounterNode();
+    private final BallSpeedNode ballSpeedNode = new BallSpeedNode();
+    private final GameControlNode gameControl = new GameControlNode();
+    private final VerticalBallNode verticalBall = new VerticalBallNode();
+    private final HorizontalBallNode horizontalBall = new HorizontalBallNode();
 
     private volatile double leftTarget = 0.5;
     private volatile double rightTarget = 0.5;
     private volatile double speedScale = 1.0;
     private volatile boolean autoRight = true;
-    private volatile boolean started;
     private volatile boolean leftUp;
     private volatile boolean leftDown;
     private volatile boolean rightUp;
@@ -67,9 +76,6 @@ public final class PongCircuitVisualizer {
     private double ballX;
     private double ballY;
     private double ballSpeed;
-    private int leftScoreValue;
-    private int rightScoreValue;
-    private boolean serveLeft;
     private boolean gameOver;
 
     @Override
@@ -85,20 +91,38 @@ public final class PongCircuitVisualizer {
     @Override
     public void build(CircuitBuilder b) {
       b.add(leftControl).add(rightControl).add(ground)
-          .add(leftPaddle).add(rightPaddle).add(ball)
+          .add(leftPaddle).add(rightPaddle)
+          .add(serveTimer).add(leftScore).add(rightScore)
+          .add(ballSpeedNode).add(gameControl)
+          .add(verticalBall).add(horizontalBall)
           .connect(leftControl, 0, leftPaddle, 0)
           .connect(rightControl, 0, rightPaddle, 0)
           .connect(leftControl, 1, ground, 0)
           .connect(rightControl, 1, ground, 0)
-          .connect(leftPaddle, 1, ball, 0)
-          .connect(rightPaddle, 1, ball, 1);
+          .connect(leftPaddle, 1, verticalBall, 0)
+          .connect(rightPaddle, 1, verticalBall, 1)
+          .connect(leftPaddle, 1, horizontalBall, 0)
+          .connect(rightPaddle, 1, horizontalBall, 1)
+          .connect(verticalBall, 4, horizontalBall, 2)
+          .connect(horizontalBall, 6, verticalBall, 2)
+          .connect(horizontalBall, 7, verticalBall, 3)
+          .connect(horizontalBall, 8, serveTimer, 0)
+          .connect(horizontalBall, 9, serveTimer, 1)
+          .connect(horizontalBall, 8, leftScore, 0)
+          .connect(horizontalBall, 9, rightScore, 0)
+          .connect(horizontalBall, 6, ballSpeedNode, 0)
+          .connect(serveTimer, 2, ballSpeedNode, 1)
+          .connect(ballSpeedNode, 2, horizontalBall, 10)
+          .connect(leftScore, 1, gameControl, 0)
+          .connect(rightScore, 1, gameControl, 1)
+          .connect(gameControl, 2, horizontalBall, 11)
+          .connect(gameControl, 2, verticalBall, 5)
+          .connect(serveTimer, 2, horizontalBall, 3)
+          .connect(serveTimer, 3, horizontalBall, 4);
     }
 
     @Override
     public void beforeStep(double time) {
-      if (!started) {
-        started = true;
-      }
       leftTarget = updateManualTarget(leftTarget, leftUp, leftDown);
       if (autoRight) {
         rightTarget = ballY;
@@ -108,33 +132,17 @@ public final class PongCircuitVisualizer {
 
       leftControl.setVoltage(leftTarget * SUPPLY_VOLTAGE);
       rightControl.setVoltage(rightTarget * SUPPLY_VOLTAGE);
-      ball.setSpeedScale(speedScale);
-      ball.setGameOver(gameOver);
-      ball.setServeLeft(serveLeft);
+      ballSpeedNode.setManualScale(speedScale);
     }
 
     @Override
     public void afterStep(double time, PowerNetworkServer network) {
-      leftPaddleY = leftPaddle.normalizedPosition();
-      rightPaddleY = rightPaddle.normalizedPosition();
-      ballX = ball.normalizedX();
-      ballY = ball.normalizedY();
-      ballSpeed = ball.currentSpeed();
-
-      if (ball.consumeLeftScorePulse()) {
-        leftScoreValue = Math.min(leftScoreValue + 1, WIN_SCORE);
-        serveLeft = false;
-      } else if (ball.consumeRightScorePulse()) {
-        rightScoreValue = Math.min(rightScoreValue + 1, WIN_SCORE);
-        serveLeft = true;
-      }
-
-      if (leftScoreValue >= WIN_SCORE || rightScoreValue >= WIN_SCORE) {
-        gameOver = true;
-      }
-      if (gameOver && (leftScoreValue < WIN_SCORE && rightScoreValue < WIN_SCORE)) {
-        gameOver = false;
-      }
+      leftPaddleY = leftPaddle.position();
+      rightPaddleY = rightPaddle.position();
+      ballX = horizontalBall.position();
+      ballY = verticalBall.position();
+      ballSpeed = Math.hypot(horizontalBall.velocity(), verticalBall.velocity()) * ballSpeedNode.speedScale();
+      gameOver = gameControl.gameOver();
     }
 
     @Override
@@ -155,8 +163,11 @@ public final class PongCircuitVisualizer {
           new Readout("Left: %.2f", () -> leftPaddleY),
           new Readout("Right: %.2f", () -> rightPaddleY),
           new Readout("Speed: %.3f", () -> ballSpeed),
-          new Readout("Left Score: %.0f", () -> leftScoreValue * 1.0),
-          new Readout("Right Score: %.0f", () -> rightScoreValue * 1.0)
+          new Readout("Left Score: %.0f", () -> leftScore.score() * 1.0),
+          new Readout("Right Score: %.0f", () -> rightScore.score() * 1.0),
+          new Readout("Serve: %.1f", () -> serveTimer.serveActive() ? 1.0 : 0.0),
+          new Readout("Speed Scale: %.2f", ballSpeedNode::speedScale),
+          new Readout("Run: %.1f", () -> gameControl.gameOver() ? 0.0 : 1.0)
       );
     }
 
@@ -180,16 +191,16 @@ public final class PongCircuitVisualizer {
 
       g.setFont(new Font(Font.MONOSPACED, Font.BOLD, 28));
       g.setColor(new Color(240, 244, 248));
-      g.drawString(Integer.toString(leftScoreValue), field.x + field.width / 2 - 80, field.y + 38);
-      g.drawString(Integer.toString(rightScoreValue), field.x + field.width / 2 + 50, field.y + 38);
+      g.drawString(Integer.toString(leftScore.score()), field.x + field.width / 2 - 80, field.y + 38);
+      g.drawString(Integer.toString(rightScore.score()), field.x + field.width / 2 + 50, field.y + 38);
 
       g.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 14));
-      g.drawString("Falstad-inspired subsystem build: paddles, ball, score, serve, and timing represented as network nodes.",
+      g.drawString("More circuit-authentic decomposition: paddle registers, serve timer, score counters, and split horizontal/vertical ball control.",
           field.x, field.y + field.height + 22);
 
       if (gameOver) {
         g.setFont(new Font(Font.MONOSPACED, Font.BOLD, 22));
-        String text = leftScoreValue > rightScoreValue ? "LEFT PLAYER WINS" : "RIGHT PLAYER WINS";
+        String text = leftScore.score() > rightScore.score() ? "LEFT PLAYER WINS" : "RIGHT PLAYER WINS";
         g.drawString(text, field.x + field.width / 2 - 120, field.y + field.height / 2);
       }
     }
@@ -210,8 +221,8 @@ public final class PongCircuitVisualizer {
         if (!autoRight) {
           rightTarget = rightSlider.getValue() / 100.0;
         }
-        double shownTarget = autoRight ? rightTarget : rightSlider.getValue() / 100.0;
-        rightLabel.setText(String.format("%.0f%%", shownTarget * 100.0));
+        double shown = autoRight ? rightTarget : rightSlider.getValue() / 100.0;
+        rightLabel.setText(String.format("%.0f%%", shown * 100.0));
       });
       controls.add(CircuitVisualizer.labeledControl("Right Paddle", rightSlider, rightLabel));
 
@@ -238,8 +249,8 @@ public final class PongCircuitVisualizer {
               autoRight = false;
               rightDown = true;
             }
-            case KeyEvent.VK_R -> resetGame();
             case KeyEvent.VK_A -> autoRight = !autoRight;
+            case KeyEvent.VK_R -> resetGame();
             default -> {
             }
           }
@@ -260,10 +271,13 @@ public final class PongCircuitVisualizer {
     }
 
     private void resetGame() {
-      leftScoreValue = 0;
-      rightScoreValue = 0;
-      ball.reset(true);
-      serveLeft = true;
+      leftScore.reset();
+      rightScore.reset();
+      serveTimer.reset(true);
+      ballSpeedNode.reset();
+      gameControl.reset();
+      horizontalBall.reset();
+      verticalBall.reset();
       gameOver = false;
     }
 
@@ -295,10 +309,10 @@ public final class PongCircuitVisualizer {
     }
   }
 
-  private static final class PaddleNode extends PowerNode {
+  private static final class PaddleRegisterNode extends PowerNode {
     private double position = 0.5;
 
-    private PaddleNode() {
+    private PaddleRegisterNode() {
       super(2);
     }
 
@@ -333,30 +347,235 @@ public final class PongCircuitVisualizer {
       }
     }
 
-    double normalizedPosition() {
+    double position() {
       return position;
     }
   }
 
-  private static final class BallNode extends PowerNode {
-    private double x = 0.5;
-    private double y = 0.5;
-    private double vx = BASE_BALL_SPEED_X;
-    private double vy = BASE_BALL_SPEED_Y;
-    private double speedScale = 1.0;
-    private double serveCooldown;
-    private boolean leftScorePulse;
-    private boolean rightScorePulse;
-    private boolean serveLeft = true;
+  private static final class ServeTimerNode extends PowerNode {
+    private double remaining;
+    private boolean serveToRight = true;
+    private double previousLeftPulse;
+    private double previousRightPulse;
+
+    private ServeTimerNode() {
+      super(4);
+      remaining = SERVE_TIME_SECONDS;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 2;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      long fingerprint = Double.doubleToLongBits(remaining);
+      return 31 * fingerprint + (serveToRight ? 1 : 0);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, remaining > 0.0 ? SUPPLY_VOLTAGE : 0.0);
+      context.stampVoltageSource(1, 3, CircuitStampContext.GROUND, serveToRight ? SUPPLY_VOLTAGE : 0.0);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double leftPulse = network.getVoltageAt(this, 0);
+      double rightPulse = network.getVoltageAt(this, 1);
+      if (leftPulse > 2.5 && previousLeftPulse <= 2.5) {
+        remaining = SERVE_TIME_SECONDS;
+        serveToRight = false;
+      }
+      if (rightPulse > 2.5 && previousRightPulse <= 2.5) {
+        remaining = SERVE_TIME_SECONDS;
+        serveToRight = true;
+      }
+      if (remaining > 0.0) {
+        remaining = Math.max(0.0, remaining - timeStepSeconds);
+      }
+      previousLeftPulse = leftPulse;
+      previousRightPulse = rightPulse;
+    }
+
+    void reset(boolean serveToRight) {
+      this.serveToRight = serveToRight;
+      this.remaining = SERVE_TIME_SECONDS;
+      previousLeftPulse = 0.0;
+      previousRightPulse = 0.0;
+    }
+
+    boolean serveActive() {
+      return remaining > 0.0;
+    }
+  }
+
+  private static final class ScoreCounterNode extends PowerNode {
+    private int score;
+    private double previousPulse;
+
+    private ScoreCounterNode() {
+      super(2);
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      double normalized = Math.min(score, WIN_SCORE) / (double) WIN_SCORE;
+      context.stampVoltageSource(0, 1, CircuitStampContext.GROUND, normalized * SUPPLY_VOLTAGE);
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return score;
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double pulse = network.getVoltageAt(this, 0);
+      if (pulse > 2.5 && previousPulse <= 2.5) {
+        score = Math.min(score + 1, WIN_SCORE);
+      }
+      previousPulse = pulse;
+    }
+
+    int score() {
+      return score;
+    }
+
+    void reset() {
+      score = 0;
+      previousPulse = 0.0;
+    }
+  }
+
+  private static final class BallSpeedNode extends PowerNode {
+    private double manualScale = 1.0;
+    private double accumulatedHits;
+    private double previousHitPulse;
+
+    private BallSpeedNode() {
+      super(3);
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      long fingerprint = Double.doubleToLongBits(manualScale);
+      return 31 * fingerprint + Double.doubleToLongBits(accumulatedHits);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, speedScale() * SUPPLY_VOLTAGE);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double hitPulse = network.getVoltageAt(this, 0);
+      double serveActive = network.getVoltageAt(this, 1);
+      if (serveActive > 2.5) {
+        accumulatedHits = 0.0;
+      } else if (hitPulse > 2.5 && previousHitPulse <= 2.5) {
+        accumulatedHits = Math.min(accumulatedHits + 0.08, 0.8);
+      }
+      previousHitPulse = hitPulse;
+    }
+
+    void setManualScale(double manualScale) {
+      this.manualScale = Math.max(0.25, manualScale);
+    }
+
+    void reset() {
+      accumulatedHits = 0.0;
+      previousHitPulse = 0.0;
+    }
+
+    double speedScale() {
+      return manualScale * (1.0 + accumulatedHits);
+    }
+  }
+
+  private static final class GameControlNode extends PowerNode {
     private boolean gameOver;
 
-    private BallNode() {
+    private GameControlNode() {
+      super(3);
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return gameOver ? 1L : 0L;
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, gameOver ? SUPPLY_VOLTAGE : 0.0);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double leftScoreVoltage = network.getVoltageAt(this, 0);
+      double rightScoreVoltage = network.getVoltageAt(this, 1);
+      int leftScore = (int) Math.round((leftScoreVoltage / SUPPLY_VOLTAGE) * WIN_SCORE);
+      int rightScore = (int) Math.round((rightScoreVoltage / SUPPLY_VOLTAGE) * WIN_SCORE);
+      gameOver = leftScore >= WIN_SCORE || rightScore >= WIN_SCORE;
+    }
+
+    void reset() {
+      gameOver = false;
+    }
+
+    boolean gameOver() {
+      return gameOver;
+    }
+  }
+
+  private static final class VerticalBallNode extends PowerNode {
+    private double y = 0.5;
+    private double vy = BASE_BALL_SPEED_Y;
+
+    private VerticalBallNode() {
       super(6);
     }
 
     @Override
     public int getVoltageSourceCount() {
-      return 4;
+      return 1;
     }
 
     @Override
@@ -365,48 +584,34 @@ public final class PongCircuitVisualizer {
     }
 
     @Override
-    public long getWakeFingerprint() {
-      long fingerprint = Double.doubleToLongBits(x);
-      fingerprint = 31 * fingerprint + Double.doubleToLongBits(y);
-      fingerprint = 31 * fingerprint + Double.doubleToLongBits(vx);
-      fingerprint = 31 * fingerprint + Double.doubleToLongBits(vy);
-      fingerprint = 31 * fingerprint + Double.doubleToLongBits(speedScale);
-      return fingerprint;
+    public double getSuggestedMaxTimeStepSeconds() {
+      return 1.0 / 3000.0;
     }
 
     @Override
-    public double getSuggestedMaxTimeStepSeconds() {
-      return 1.0 / 2000.0;
+    public long getWakeFingerprint() {
+      long fingerprint = Double.doubleToLongBits(y);
+      return 31 * fingerprint + Double.doubleToLongBits(vy);
     }
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, x * SUPPLY_VOLTAGE);
-      context.stampVoltageSource(1, 3, CircuitStampContext.GROUND, y * SUPPLY_VOLTAGE);
-      context.stampVoltageSource(2, 4, CircuitStampContext.GROUND, leftScorePulse ? SUPPLY_VOLTAGE : 0.0);
-      context.stampVoltageSource(3, 5, CircuitStampContext.GROUND, rightScorePulse ? SUPPLY_VOLTAGE : 0.0);
+      context.stampVoltageSource(0, 4, CircuitStampContext.GROUND, y * SUPPLY_VOLTAGE);
     }
 
     @Override
     public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
-      leftScorePulse = false;
-      rightScorePulse = false;
-      if (gameOver) {
+      if (network.getVoltageAt(this, 5) > 2.5) {
         return;
       }
 
-      if (serveCooldown > 0.0) {
-        serveCooldown = Math.max(0.0, serveCooldown - timeStepSeconds);
-        if (serveCooldown == 0.0) {
-          vx = (serveLeft ? -1.0 : 1.0) * BASE_BALL_SPEED_X;
-          vy = BASE_BALL_SPEED_Y * (serveLeft ? -1.0 : 1.0);
-        }
-        return;
+      double hitPulse = network.getVoltageAt(this, 2);
+      if (hitPulse > 2.5) {
+        double deflection = (network.getVoltageAt(this, 3) / SUPPLY_VOLTAGE) * 2.0 - 1.0;
+        vy = BASE_BALL_SPEED_Y * Math.max(-1.5, Math.min(1.5, deflection));
       }
 
-      x += vx * speedScale * timeStepSeconds;
-      y += vy * speedScale * timeStepSeconds;
-
+      y += vy * timeStepSeconds;
       if (y <= 0.0) {
         y = 0.0;
         vy = Math.abs(vy);
@@ -414,86 +619,132 @@ public final class PongCircuitVisualizer {
         y = 1.0;
         vy = -Math.abs(vy);
       }
+    }
 
+    void reset() {
+      y = 0.5;
+      vy = BASE_BALL_SPEED_Y;
+    }
+
+    double position() {
+      return y;
+    }
+
+    double velocity() {
+      return vy;
+    }
+  }
+
+  private static final class HorizontalBallNode extends PowerNode {
+    private double x = 0.5;
+    private double vx = BASE_BALL_SPEED_X;
+    private boolean hitPulse;
+    private boolean leftScorePulse;
+    private boolean rightScorePulse;
+    private double deflectionSignal = 0.5;
+
+    private HorizontalBallNode() {
+      super(12);
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 5;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_NONLINEAR;
+    }
+
+    @Override
+    public double getSuggestedMaxTimeStepSeconds() {
+      return 1.0 / 3000.0;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      long fingerprint = Double.doubleToLongBits(x);
+      fingerprint = 31 * fingerprint + Double.doubleToLongBits(vx);
+      return fingerprint;
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 5, CircuitStampContext.GROUND, x * SUPPLY_VOLTAGE);
+      context.stampVoltageSource(1, 6, CircuitStampContext.GROUND, hitPulse ? SUPPLY_VOLTAGE : 0.0);
+      context.stampVoltageSource(2, 7, CircuitStampContext.GROUND, deflectionSignal * SUPPLY_VOLTAGE);
+      context.stampVoltageSource(3, 8, CircuitStampContext.GROUND, leftScorePulse ? SUPPLY_VOLTAGE : 0.0);
+      context.stampVoltageSource(4, 9, CircuitStampContext.GROUND, rightScorePulse ? SUPPLY_VOLTAGE : 0.0);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      hitPulse = false;
+      leftScorePulse = false;
+      rightScorePulse = false;
+      if (network.getVoltageAt(this, 11) > 2.5) {
+        return;
+      }
+
+      double serveActive = network.getVoltageAt(this, 3);
+      if (serveActive > 2.5) {
+        double serveDirection = network.getVoltageAt(this, 4);
+        vx = serveDirection > 2.5 ? Math.abs(BASE_BALL_SPEED_X) : -Math.abs(BASE_BALL_SPEED_X);
+        x = 0.5;
+        return;
+      }
+
+      double speedScale = Math.max(0.25, network.getVoltageAt(this, 10) / SUPPLY_VOLTAGE);
+      x += vx * speedScale * timeStepSeconds;
       double leftPaddle = clamp01(network.getVoltageAt(this, 0) / SUPPLY_VOLTAGE);
       double rightPaddle = clamp01(network.getVoltageAt(this, 1) / SUPPLY_VOLTAGE);
+      double ballY = clamp01(network.getVoltageAt(this, 2) / SUPPLY_VOLTAGE);
 
       if (x <= PADDLE_MARGIN) {
-        if (intersectsPaddle(leftPaddle)) {
+        if (intersectsPaddle(ballY, leftPaddle)) {
           x = PADDLE_MARGIN;
           vx = Math.abs(vx) * 1.04;
-          vy = reflectVertical(y, leftPaddle);
+          deflectionSignal = clamp01(0.5 + (ballY - leftPaddle) / PADDLE_HEIGHT);
+          hitPulse = true;
         } else {
           rightScorePulse = true;
-          reset(false);
+          x = 0.5;
         }
       } else if (x >= 1.0 - PADDLE_MARGIN) {
-        if (intersectsPaddle(rightPaddle)) {
+        if (intersectsPaddle(ballY, rightPaddle)) {
           x = 1.0 - PADDLE_MARGIN;
           vx = -Math.abs(vx) * 1.04;
-          vy = reflectVertical(y, rightPaddle);
+          deflectionSignal = clamp01(0.5 + (ballY - rightPaddle) / PADDLE_HEIGHT);
+          hitPulse = true;
         } else {
           leftScorePulse = true;
-          reset(true);
+          x = 0.5;
         }
       }
     }
 
-    void reset(boolean nextServeLeft) {
+    void reset() {
       x = 0.5;
-      y = 0.5;
-      vx = 0.0;
-      vy = 0.0;
-      serveLeft = nextServeLeft;
-      serveCooldown = 0.65;
-    }
-
-    void setSpeedScale(double speedScale) {
-      this.speedScale = Math.max(0.25, speedScale);
-    }
-
-    void setServeLeft(boolean serveLeft) {
-      this.serveLeft = serveLeft;
-    }
-
-    void setGameOver(boolean gameOver) {
-      this.gameOver = gameOver;
-    }
-
-    boolean consumeLeftScorePulse() {
-      boolean pulse = leftScorePulse;
+      vx = BASE_BALL_SPEED_X;
+      hitPulse = false;
       leftScorePulse = false;
-      return pulse;
-    }
-
-    boolean consumeRightScorePulse() {
-      boolean pulse = rightScorePulse;
       rightScorePulse = false;
-      return pulse;
+      deflectionSignal = 0.5;
     }
 
-    double normalizedX() {
+    double position() {
       return x;
     }
 
-    double normalizedY() {
-      return y;
+    double velocity() {
+      return vx;
     }
 
-    double currentSpeed() {
-      return Math.hypot(vx, vy) * speedScale;
-    }
-
-    private boolean intersectsPaddle(double paddlePosition) {
-      double top = paddlePosition - PADDLE_HEIGHT / 2.0;
-      double bottom = paddlePosition + PADDLE_HEIGHT / 2.0;
-      return y >= top && y <= bottom;
-    }
-
-    private double reflectVertical(double ballY, double paddlePosition) {
-      double offset = (ballY - paddlePosition) / (PADDLE_HEIGHT / 2.0);
-      return BASE_BALL_SPEED_Y * Math.max(-1.4, Math.min(1.4, offset));
+    private boolean intersectsPaddle(double ballY, double paddleY) {
+      double top = paddleY - PADDLE_HEIGHT / 2.0;
+      double bottom = paddleY + PADDLE_HEIGHT / 2.0;
+      return ballY >= top && ballY <= bottom;
     }
   }
-
 }
