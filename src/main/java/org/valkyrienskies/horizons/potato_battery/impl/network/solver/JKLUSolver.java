@@ -12,6 +12,8 @@ import edu.ufl.cise.klu.tdouble.Dklu_solve;
 import java.util.Arrays;
 
 public class JKLUSolver extends AbstractStampingSolver {
+  private static final double JKLU_VOLTAGE_CONVERGENCE = 1.0e-5;
+  private static final double JKLU_CURRENT_CONVERGENCE = 1.0e-7;
   private final KLU_common common = new KLU_common();
   private int cachedDimension = -1;
   private int[] cachedColumnPointers;
@@ -23,6 +25,16 @@ public class JKLUSolver extends AbstractStampingSolver {
     if (Dklu_defaults.klu_defaults(common) == 0) {
       throw new IllegalStateException("Failed to initialize JKLU defaults");
     }
+  }
+
+  @Override
+  protected double voltageConvergence() {
+    return JKLU_VOLTAGE_CONVERGENCE;
+  }
+
+  @Override
+  protected double currentConvergence() {
+    return JKLU_CURRENT_CONVERGENCE;
   }
 
   @Override

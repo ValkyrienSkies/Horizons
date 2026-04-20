@@ -20,8 +20,8 @@ import java.util.WeakHashMap;
 
 abstract class AbstractStampingSolver implements IPBSolver {
   private static final int MAX_NONLINEAR_ITERATIONS = 80;
-  private static final double VOLTAGE_CONVERGENCE = 1.0e-6;
-  private static final double CURRENT_CONVERGENCE = 1.0e-8;
+  private static final double DEFAULT_VOLTAGE_CONVERGENCE = 1.0e-6;
+  private static final double DEFAULT_CURRENT_CONVERGENCE = 1.0e-8;
   private static final double MIN_VOLTAGE_SCALE = 1.0;
   private static final double MIN_CURRENT_SCALE = 1.0e-3;
   private static final double MAX_RELATIVE_VOLTAGE_STEP = 0.75;
@@ -96,6 +96,14 @@ abstract class AbstractStampingSolver implements IPBSolver {
   }
 
   protected abstract double[] solveLinearSystem(MatrixAccumulator matrix, double[] rhs);
+
+  protected double voltageConvergence() {
+    return DEFAULT_VOLTAGE_CONVERGENCE;
+  }
+
+  protected double currentConvergence() {
+    return DEFAULT_CURRENT_CONVERGENCE;
+  }
 
   protected LinearSolveStats solveLinearSystemWithStats(MatrixAccumulator matrix, double[] rhs) {
     long totalStart = System.nanoTime();
@@ -176,7 +184,7 @@ abstract class AbstractStampingSolver implements IPBSolver {
           maxCurrentDelta = Math.max(maxCurrentDelta, Math.abs(candidate[equation] - guess[equation]));
         }
       }
-      if (maxVoltageDelta <= VOLTAGE_CONVERGENCE && maxCurrentDelta <= CURRENT_CONVERGENCE) {
+      if (maxVoltageDelta <= voltageConvergence() && maxCurrentDelta <= currentConvergence()) {
         return candidate;
       }
 
