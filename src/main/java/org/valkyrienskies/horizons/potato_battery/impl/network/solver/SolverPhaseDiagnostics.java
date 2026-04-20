@@ -24,6 +24,8 @@ public final class SolverPhaseDiagnostics {
     return new PhaseBenchmarkResult(
         stats.topologyNanos(),
         stats.stampNanos(),
+        stats.cscNanos(),
+        stats.factorNanos(),
         stats.solveNanos(),
         stats.writeBackNanos(),
         stats.nonlinearIterations(),
@@ -31,13 +33,17 @@ public final class SolverPhaseDiagnostics {
         stats.branchCount(),
         stats.unknownCount(),
         stats.substeps(),
-        stats.totalMeasuredNanos()
+        stats.totalMeasuredNanos(),
+        stats.nonZeros(),
+        stats.patternReuseCount()
     );
   }
 
   public record PhaseBenchmarkResult(
       long topologyNanos,
       long stampNanos,
+      long cscNanos,
+      long factorNanos,
       long solveNanos,
       long writeBackNanos,
       int nonlinearIterations,
@@ -45,7 +51,9 @@ public final class SolverPhaseDiagnostics {
       int branchCount,
       int unknownCount,
       int substeps,
-      long totalMeasuredNanos
+      long totalMeasuredNanos,
+      long nonZeros,
+      int patternReuseCount
   ) {}
 
   public record SolveFeedback(

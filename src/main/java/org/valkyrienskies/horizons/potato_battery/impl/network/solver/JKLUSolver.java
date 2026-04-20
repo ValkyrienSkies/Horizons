@@ -27,17 +27,27 @@ public class JKLUSolver extends AbstractStampingSolver {
 
   @Override
   protected synchronized double[] solveLinearSystem(MatrixAccumulator matrix, double[] rhs) {
-    CscMatrix csc = matrix.toCscMatrix();
-    double[] cachedAttempt = solveWithCache(csc, rhs.clone());
-    return cachedAttempt != null ? cachedAttempt : solveFresh(csc, rhs);
+    return solveLinearSystemWithStats(matrix, rhs).solution();
   }
 
-  private double[] solveWithCache(CscMatrix csc, double[] rhs) {
+  @Override
+  protected synchronized LinearSolveStats solveLinearSystemWithStats(MatrixAccumulator matrix, double[] rhs) {
+    long cscStart = System.nanoTime();
+    CscMatrix csc = matrix.toCscMatrix();
+    long cscNanos = System.nanoTime() - cscStart;
+
+    LinearSolveStats cachedAttempt = solveWithCache(csc, rhs.clone(), cscNanos);
+    return cachedAttempt.solution() != null ? cachedAttempt : solveFresh(csc, rhs, cscNanos);
+  }
+
+  private LinearSolveStats solveWithCache(CscMatrix csc, double[] rhs, long cscNanos) {
+    boolean reusedPattern = matchesCachedPattern(csc);
+    long factorStart = System.nanoTime();
     if (!matchesCachedPattern(csc)) {
       cachedSymbolic = Dklu_analyze.klu_analyze(csc.dimension(), csc.columnPointers(), csc.rowIndices(), common);
       if (cachedSymbolic == null) {
         cachedNumeric = null;
-        return null;
+        return new LinearSolveStats(null, cscNanos, System.nanoTime() - factorStart, 0L, csc.values().length, false);
       }
       cachedNumeric = null;
       cachedDimension = csc.dimension();
@@ -53,33 +63,40 @@ public class JKLUSolver extends AbstractStampingSolver {
 
     if (cachedNumeric == null) {
       invalidateCache();
-      return null;
+      return new LinearSolveStats(null, cscNanos, System.nanoTime() - factorStart, 0L, csc.values().length, reusedPattern);
     }
+    long factorNanos = System.nanoTime() - factorStart;
 
+    long solveStart = System.nanoTime();
     if (Dklu_solve.klu_solve(cachedSymbolic, cachedNumeric, csc.dimension(), 1, rhs, 0, common) == 0) {
       invalidateCache();
-      return null;
+      return new LinearSolveStats(null, cscNanos, factorNanos, System.nanoTime() - solveStart, csc.values().length, reusedPattern);
     }
-    return rhs;
+    return new LinearSolveStats(rhs, cscNanos, factorNanos, System.nanoTime() - solveStart, csc.values().length, reusedPattern);
   }
 
-  private double[] solveFresh(CscMatrix csc, double[] rhs) {
+  private LinearSolveStats solveFresh(CscMatrix csc, double[] rhs, long cscNanos) {
     KLU_common freshCommon = new KLU_common();
     if (Dklu_defaults.klu_defaults(freshCommon) == 0) {
-      return null;
+      return new LinearSolveStats(null, cscNanos, 0L, 0L, csc.values().length, false);
     }
 
+    long factorStart = System.nanoTime();
     KLU_symbolic symbolic = Dklu_analyze.klu_analyze(csc.dimension(), csc.columnPointers(), csc.rowIndices(), freshCommon);
     if (symbolic == null) {
-      return null;
+      return new LinearSolveStats(null, cscNanos, System.nanoTime() - factorStart, 0L, csc.values().length, false);
     }
 
     KLU_numeric numeric = Dklu_factor.klu_factor(csc.columnPointers(), csc.rowIndices(), csc.values(), symbolic, freshCommon);
     if (numeric == null) {
-      return null;
+      return new LinearSolveStats(null, cscNanos, System.nanoTime() - factorStart, 0L, csc.values().length, false);
     }
+    long factorNanos = System.nanoTime() - factorStart;
 
-    return Dklu_solve.klu_solve(symbolic, numeric, csc.dimension(), 1, rhs, 0, freshCommon) == 0 ? null : rhs;
+    long solveStart = System.nanoTime();
+    return Dklu_solve.klu_solve(symbolic, numeric, csc.dimension(), 1, rhs, 0, freshCommon) == 0
+        ? new LinearSolveStats(null, cscNanos, factorNanos, System.nanoTime() - solveStart, csc.values().length, false)
+        : new LinearSolveStats(rhs, cscNanos, factorNanos, System.nanoTime() - solveStart, csc.values().length, false);
   }
 
   private boolean matchesCachedPattern(CscMatrix csc) {

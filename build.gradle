@@ -301,3 +301,17 @@ tasks.register("runAstableSolveBenchmarkDiagnostics", JavaExec) {
         systemProperty "power.benchmark.iterations", project.property("benchmarkIterations").toString()
     }
 }
+
+tasks.register("runAstablePhaseBenchmarkDiagnostics", JavaExec) {
+    group = "verification"
+    description = "Benchmark astable stamping, CSC conversion, and linear solve phases"
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "org.valkyrienskies.horizons.potato_battery.AstablePhaseBenchmarkDiagnostics"
+
+    def solverName = (project.findProperty("powerSolver") ?: "all").toString()
+    systemProperty "power.solver", solverName
+    if (project.hasProperty("benchmarkIterations")) {
+        systemProperty "power.benchmark.iterations", project.property("benchmarkIterations").toString()
+    }
+}

@@ -2,6 +2,7 @@ package org.valkyrienskies.horizons.potato_battery.impl.network.solver;
 
 import it.unimi.dsi.fastutil.longs.Long2DoubleMap;
 import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork;
 import org.valkyrienskies.horizons.potato_battery.api.network.CircuitStampContext;
 import org.valkyrienskies.horizons.potato_battery.api.network.IPBSolver;
@@ -96,6 +97,12 @@ abstract class AbstractStampingSolver implements IPBSolver {
 
   protected abstract double[] solveLinearSystem(MatrixAccumulator matrix, double[] rhs);
 
+  protected LinearSolveStats solveLinearSystemWithStats(MatrixAccumulator matrix, double[] rhs) {
+    long totalStart = System.nanoTime();
+    double[] solution = solveLinearSystem(matrix, rhs);
+    return new LinearSolveStats(solution, 0L, 0L, System.nanoTime() - totalStart, matrix.nonZeros(), false);
+  }
+
   private SolveTopology getOrBuildTopology(IPowerNetwork<?> network, Collection<IPowerNode> nodes) {
     if (network instanceof TopologyCacheableNetwork cacheableNetwork) {
       CachedTopologyEntry cached = topologyCache.get(network);
@@ -125,7 +132,7 @@ abstract class AbstractStampingSolver implements IPBSolver {
         accumulator.nonlinearIterations++;
       }
       long stampStart = accumulator == null ? 0L : System.nanoTime();
-      MatrixAccumulator matrix = new MatrixAccumulator(topology.totalUnknowns);
+      MatrixAccumulator matrix = topology.createMatrixAccumulator();
       double[] rhs = new double[topology.totalUnknowns];
 
       for (Branch branch : topology.branches) {
@@ -136,15 +143,24 @@ abstract class AbstractStampingSolver implements IPBSolver {
       for (NodeTopology nodeTopology : topology.nodeTopologies) {
         nodeTopology.node.stamp(new StampContextImpl(nodeTopology, matrix, rhs, timeStep, guess));
       }
+      topology.captureMatrixPattern(matrix);
       if (accumulator instanceof StepPhaseAccumulator phaseAccumulator) {
         phaseAccumulator.stampNanos += System.nanoTime() - stampStart;
       }
 
-      long solveStart = accumulator == null ? 0L : System.nanoTime();
-      double[] candidate = solveLinearSystem(matrix, rhs.clone());
+      LinearSolveStats solveStats = accumulator instanceof StepPhaseAccumulator
+          ? solveLinearSystemWithStats(matrix, rhs.clone())
+          : new LinearSolveStats(solveLinearSystem(matrix, rhs.clone()), 0L, 0L, 0L, matrix.nonZeros(), false);
       if (accumulator instanceof StepPhaseAccumulator phaseAccumulator) {
-        phaseAccumulator.solveNanos += System.nanoTime() - solveStart;
+        phaseAccumulator.cscNanos += solveStats.cscNanos();
+        phaseAccumulator.factorNanos += solveStats.factorNanos();
+        phaseAccumulator.solveNanos += solveStats.solveNanos();
+        phaseAccumulator.nonZeros += solveStats.nonZeros();
+        if (solveStats.reusedPattern()) {
+          phaseAccumulator.patternReuseCount++;
+        }
       }
+      double[] candidate = solveStats.solution();
       if (candidate == null || !isFinite(candidate)) {
         return null;
       }
@@ -200,6 +216,8 @@ abstract class AbstractStampingSolver implements IPBSolver {
   static final class StepPhaseStats {
     private final long topologyNanos;
     private final long stampNanos;
+    private final long cscNanos;
+    private final long factorNanos;
     private final long solveNanos;
     private final long writeBackNanos;
     private final int nonlinearIterations;
@@ -207,20 +225,28 @@ abstract class AbstractStampingSolver implements IPBSolver {
     private final int branchCount;
     private final int unknownCount;
     private final int substeps;
+    private final long nonZeros;
+    private final int patternReuseCount;
 
     private StepPhaseStats(
         long topologyNanos,
         long stampNanos,
+        long cscNanos,
+        long factorNanos,
         long solveNanos,
         long writeBackNanos,
         int nonlinearIterations,
         int nodeCount,
         int branchCount,
         int unknownCount,
-        int substeps
+        int substeps,
+        long nonZeros,
+        int patternReuseCount
     ) {
       this.topologyNanos = topologyNanos;
       this.stampNanos = stampNanos;
+      this.cscNanos = cscNanos;
+      this.factorNanos = factorNanos;
       this.solveNanos = solveNanos;
       this.writeBackNanos = writeBackNanos;
       this.nonlinearIterations = nonlinearIterations;
@@ -228,6 +254,8 @@ abstract class AbstractStampingSolver implements IPBSolver {
       this.branchCount = branchCount;
       this.unknownCount = unknownCount;
       this.substeps = substeps;
+      this.nonZeros = nonZeros;
+      this.patternReuseCount = patternReuseCount;
     }
 
     long topologyNanos() {
@@ -236,6 +264,14 @@ abstract class AbstractStampingSolver implements IPBSolver {
 
     long stampNanos() {
       return stampNanos;
+    }
+
+    long cscNanos() {
+      return cscNanos;
+    }
+
+    long factorNanos() {
+      return factorNanos;
     }
 
     long solveNanos() {
@@ -266,8 +302,16 @@ abstract class AbstractStampingSolver implements IPBSolver {
       return substeps;
     }
 
+    long nonZeros() {
+      return nonZeros;
+    }
+
+    int patternReuseCount() {
+      return patternReuseCount;
+    }
+
     long totalMeasuredNanos() {
-      return topologyNanos + stampNanos + solveNanos + writeBackNanos;
+      return topologyNanos + stampNanos + cscNanos + factorNanos + solveNanos + writeBackNanos;
     }
   }
 
@@ -286,23 +330,31 @@ abstract class AbstractStampingSolver implements IPBSolver {
   private static final class StepPhaseAccumulator extends StepAccumulator {
     private long topologyNanos;
     private long stampNanos;
+    private long cscNanos;
+    private long factorNanos;
     private long solveNanos;
     private long writeBackNanos;
     private int nodeCount;
     private int branchCount;
     private int unknownCount;
+    private long nonZeros;
+    private int patternReuseCount;
 
     private StepPhaseStats finish() {
       return new StepPhaseStats(
           topologyNanos,
           stampNanos,
+          cscNanos,
+          factorNanos,
           solveNanos,
           writeBackNanos,
           nonlinearIterations,
           nodeCount,
           branchCount,
           unknownCount,
-          substeps
+          substeps,
+          nonZeros,
+          patternReuseCount
       );
     }
   }
@@ -418,11 +470,24 @@ abstract class AbstractStampingSolver implements IPBSolver {
 
   protected static final class MatrixAccumulator {
     private final int dimension;
-    private final Long2DoubleOpenHashMap entries = new Long2DoubleOpenHashMap();
+    private final Long2DoubleOpenHashMap entries;
+    private final MatrixPattern pattern;
+    private final double[] values;
+    private CscMatrix cachedCscMatrix;
 
     private MatrixAccumulator(int dimension) {
       this.dimension = dimension;
+      this.entries = new Long2DoubleOpenHashMap();
       this.entries.defaultReturnValue(0.0);
+      this.pattern = null;
+      this.values = null;
+    }
+
+    private MatrixAccumulator(MatrixPattern pattern) {
+      this.dimension = pattern.dimension();
+      this.entries = null;
+      this.pattern = pattern;
+      this.values = new double[pattern.rowIndices().length];
     }
 
     int getDimension() {
@@ -431,10 +496,36 @@ abstract class AbstractStampingSolver implements IPBSolver {
 
     void add(int row, int column, double value) {
       long key = (((long) row) << 32) | (column & 0xffffffffL);
+      if (pattern != null) {
+        int index = pattern.indexByKey().get(key);
+        if (index < 0) {
+          throw new IllegalStateException("Missing matrix pattern entry for row=" + row + ", column=" + column);
+        }
+        values[index] += value;
+        return;
+      }
+
       entries.put(key, entries.get(key) + value);
+      cachedCscMatrix = null;
     }
 
     List<MatrixEntry> sortedEntries() {
+      if (pattern != null) {
+        List<MatrixEntry> sorted = new ArrayList<>(values.length);
+        for (int column = 0; column < dimension; column++) {
+          int start = pattern.columnPointers()[column];
+          int end = pattern.columnPointers()[column + 1];
+          for (int index = start; index < end; index++) {
+            double value = values[index];
+            if (Math.abs(value) <= 1.0e-18) {
+              continue;
+            }
+            sorted.add(new MatrixEntry(pattern.rowIndices()[index], column, value));
+          }
+        }
+        return sorted;
+      }
+
       List<MatrixEntry> sorted = new ArrayList<>(entries.size());
       for (Long2DoubleMap.Entry entry : entries.long2DoubleEntrySet()) {
         double value = entry.getDoubleValue();
@@ -451,6 +542,13 @@ abstract class AbstractStampingSolver implements IPBSolver {
     }
 
     CscMatrix toCscMatrix() {
+      if (pattern != null) {
+        return new CscMatrix(dimension, pattern.columnPointers(), pattern.rowIndices(), values);
+      }
+      if (cachedCscMatrix != null) {
+        return cachedCscMatrix;
+      }
+
       List<MatrixEntry> sorted = sortedEntries();
       int[] columnPointers = new int[dimension + 1];
       int[] rowIndices = new int[sorted.size()];
@@ -468,13 +566,68 @@ abstract class AbstractStampingSolver implements IPBSolver {
       }
       columnPointers[dimension] = sorted.size();
 
-      return new CscMatrix(dimension, columnPointers, rowIndices, values);
+      cachedCscMatrix = new CscMatrix(dimension, columnPointers, rowIndices, values);
+      return cachedCscMatrix;
+    }
+
+    int nonZeros() {
+      return pattern != null ? values.length : entries.size();
+    }
+
+    MatrixPattern capturePattern() {
+      if (pattern != null) {
+        return pattern;
+      }
+
+      List<MatrixEntry> sorted = new ArrayList<>(entries.size());
+      for (Long2DoubleMap.Entry entry : entries.long2DoubleEntrySet()) {
+        long key = entry.getLongKey();
+        sorted.add(new MatrixEntry((int) (key >>> 32), (int) key, entry.getDoubleValue()));
+      }
+      sorted.sort(Comparator.comparingInt(MatrixEntry::column).thenComparingInt(MatrixEntry::row));
+      int[] columnPointers = new int[dimension + 1];
+      int[] rowIndices = new int[sorted.size()];
+      double[] initialValues = new double[sorted.size()];
+      Long2IntOpenHashMap indexByKey = new Long2IntOpenHashMap(sorted.size());
+      indexByKey.defaultReturnValue(-1);
+
+      int index = 0;
+      for (int column = 0; column < dimension; column++) {
+        columnPointers[column] = index;
+        while (index < sorted.size() && sorted.get(index).column() == column) {
+          MatrixEntry entry = sorted.get(index);
+          rowIndices[index] = entry.row();
+          initialValues[index] = entry.value();
+          long key = (((long) entry.row()) << 32) | (entry.column() & 0xffffffffL);
+          indexByKey.put(key, index);
+          index++;
+        }
+      }
+      columnPointers[dimension] = sorted.size();
+      cachedCscMatrix = new CscMatrix(dimension, columnPointers, rowIndices, initialValues);
+      return new MatrixPattern(dimension, columnPointers, rowIndices, indexByKey);
     }
   }
 
   protected record CscMatrix(int dimension, int[] columnPointers, int[] rowIndices, double[] values) {}
 
+  protected record LinearSolveStats(
+      double[] solution,
+      long cscNanos,
+      long factorNanos,
+      long solveNanos,
+      int nonZeros,
+      boolean reusedPattern
+  ) {}
+
   private record MatrixEntry(int row, int column, double value) {}
+
+  private record MatrixPattern(
+      int dimension,
+      int[] columnPointers,
+      int[] rowIndices,
+      Long2IntOpenHashMap indexByKey
+  ) {}
 
   private static final class StampContextImpl implements CircuitStampContext {
     private final NodeTopology topology;
@@ -614,11 +767,22 @@ abstract class AbstractStampingSolver implements IPBSolver {
     private final List<NodeTopology> nodeTopologies;
     private final List<Branch> branches;
     private final int totalUnknowns;
+    private MatrixPattern matrixPattern;
 
     private SolveTopology(List<NodeTopology> nodeTopologies, List<Branch> branches, int totalUnknowns) {
       this.nodeTopologies = nodeTopologies;
       this.branches = branches;
       this.totalUnknowns = totalUnknowns;
+    }
+
+    private MatrixAccumulator createMatrixAccumulator() {
+      return matrixPattern == null ? new MatrixAccumulator(totalUnknowns) : new MatrixAccumulator(matrixPattern);
+    }
+
+    private void captureMatrixPattern(MatrixAccumulator accumulator) {
+      if (matrixPattern == null) {
+        matrixPattern = accumulator.capturePattern();
+      }
     }
 
     private static SolveTopology build(Collection<IPowerNode> nodes) {

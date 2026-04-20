@@ -26,7 +26,7 @@ public final class AstableMultivibratorVisualizer {
   }
 
   private static final class AstableScenario implements Scenario {
-    private static final double TIME_STEP = 1.0 / 240.0;
+    private static final double TIME_STEP = 1.0 / 120.0;
     private static final double VCC = 5.0;
 
     private final BatteryNode battery = new BatteryNode(VCC);

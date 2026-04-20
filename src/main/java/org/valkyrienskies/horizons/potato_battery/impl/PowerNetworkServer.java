@@ -35,7 +35,10 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
 
   private final Long2ObjectOpenHashMap<IPowerNode> nodes = new Long2ObjectOpenHashMap<>();
 
-  private final HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> nodeEnergyData = new HashMap<>();
+  private volatile HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> publishedNodeEnergyData = new HashMap<>();
+  private HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> stagingNodeEnergyData = new HashMap<>();
+  private @Nullable Thread solveThread;
+  private boolean solveInProgress;
 
   private final ConcurrentLinkedQueue<QueuedChange> updateQueue = new ConcurrentLinkedQueue<>();
   private boolean topologyDirty = true;
@@ -49,6 +52,7 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
   private int lastRequestedSubsteps = 1;
   private int lastNonlinearIterations;
   private boolean lastIterationLimitHit;
+  private int settleConfirmationSolvesRemaining = 1;
 
   public PowerNetworkServer(@Nullable ServerLevel level, @Nullable PhysLevel physLevel) {
     this(level, physLevel, new JKLUSolver());
@@ -109,12 +113,13 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
       if (change.node == null) {
         IPowerNode removed = nodes.remove(change.pos.asLong());
         if (removed != null) {
-          nodeEnergyData.remove(removed);
+          publishedNodeEnergyData.remove(removed);
+          stagingNodeEnergyData.remove(removed);
           removed.onRemoved();
         }
       } else {
         nodes.put(change.pos.asLong(), change.node);
-        nodeEnergyData.put(change.node, new Long2ObjectOpenHashMap<>(change.node.getPorts()));
+        publishedNodeEnergyData.putIfAbsent(change.node, new Long2ObjectOpenHashMap<>(change.node.getPorts()));
         change.node.onAdded();
       }
     });
@@ -124,6 +129,7 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
       topologyDirty = true;
       topologyRevision++;
       sleeping = false;
+      settleConfirmationSolvesRemaining = 1;
     }
 
     SimulationPolicy simulationPolicy = classifySimulationPolicy();
@@ -132,6 +138,7 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
     boolean wakeFingerprintChanged = wakeFingerprint != lastWakeFingerprint;
     if (wakeFingerprintChanged) {
       sleeping = false;
+      settleConfirmationSolvesRemaining = 1;
     }
 
     if (sleeping
@@ -143,22 +150,30 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
 
     lastSolveMaxVoltageDelta = 0.0;
     lastSolveMaxCurrentDelta = 0.0;
+    beginSolveSnapshot();
     SolverPhaseDiagnostics.SolveFeedback solveFeedback = simulationPolicy.mode == PowerNodeSimulationMode.DYNAMIC_NONLINEAR
         ? SolverPhaseDiagnostics.stepWithFeedback(this.solver, this, simulationPolicy.subSteps)
         : stepWithoutFeedback(simulationPolicy.subSteps);
+    publishSolveSnapshot();
     lastNonlinearIterations = solveFeedback.nonlinearIterations();
     lastIterationLimitHit = solveFeedback.iterationLimitHit();
 
-    if (simulationPolicy.mode == PowerNodeSimulationMode.STATIC_LINEAR
-        && lastSolveMaxVoltageDelta <= SLEEP_VOLTAGE_DELTA
-        && lastSolveMaxCurrentDelta <= SLEEP_CURRENT_DELTA) {
-      sleeping = true;
-    } else if (simulationPolicy.mode == PowerNodeSimulationMode.DYNAMIC_LINEAR
-        && lastSolveMaxVoltageDelta <= SLEEP_VOLTAGE_DELTA
-        && lastSolveMaxCurrentDelta <= SLEEP_CURRENT_DELTA) {
-      sleeping = true;
+    boolean settledLinear = lastSolveMaxVoltageDelta <= SLEEP_VOLTAGE_DELTA
+        && lastSolveMaxCurrentDelta <= SLEEP_CURRENT_DELTA;
+    if ((simulationPolicy.mode == PowerNodeSimulationMode.STATIC_LINEAR
+        || simulationPolicy.mode == PowerNodeSimulationMode.DYNAMIC_LINEAR)
+        && settledLinear) {
+      if (settleConfirmationSolvesRemaining > 0) {
+        settleConfirmationSolvesRemaining--;
+        sleeping = false;
+      } else {
+        sleeping = true;
+      }
     } else {
       sleeping = false;
+      if (simulationPolicy.mode != PowerNodeSimulationMode.DYNAMIC_NONLINEAR) {
+        settleConfirmationSolvesRemaining = 1;
+      }
     }
 
     topologyDirty = false;
@@ -196,14 +211,23 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
 
   @Override
   public NodeEnergyData getNodeEnergyData(IPowerNode node, int port) {
-    Long2ObjectOpenHashMap<NodeEnergyData> portMap = nodeEnergyData.computeIfAbsent(node, ignored -> new Long2ObjectOpenHashMap<>(node.getPorts()));
-    return portMap.computeIfAbsent(port, ignored -> new NodeEnergyData());
+    NodeEnergyData fromSolve = solveThread == Thread.currentThread() ? getNodeEnergyData(stagingNodeEnergyData, node, port) : null;
+    if (fromSolve != null) {
+      return fromSolve;
+    }
+
+    NodeEnergyData published = getNodeEnergyData(publishedNodeEnergyData, node, port);
+    return published != null ? published : new NodeEnergyData();
   }
 
   @Override
   public void setNodeEnergyData(IPowerNode node, int port, NodeEnergyData energyData) {
-    Long2ObjectOpenHashMap<NodeEnergyData> portMap = nodeEnergyData.computeIfAbsent(node, ignored -> new Long2ObjectOpenHashMap<>(node.getPorts()));
+    HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> target = mutableEnergyDataTarget();
+    Long2ObjectOpenHashMap<NodeEnergyData> portMap = target.computeIfAbsent(node, ignored -> new Long2ObjectOpenHashMap<>(node.getPorts()));
     NodeEnergyData previous = portMap.get(port);
+    if (previous == null) {
+      previous = getNodeEnergyData(publishedNodeEnergyData, node, port);
+    }
     if (previous != null) {
       lastSolveMaxVoltageDelta = Math.max(lastSolveMaxVoltageDelta, Math.abs(previous.getVoltage() - energyData.getVoltage()));
       lastSolveMaxCurrentDelta = Math.max(lastSolveMaxCurrentDelta, Math.abs(previous.getCurrent() - energyData.getCurrent()));
@@ -213,7 +237,7 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
 
   @Override
   public void clearNodeEnergyData() {
-    nodeEnergyData.values().forEach(Long2ObjectOpenHashMap::clear);
+    mutableEnergyDataTarget().clear();
   }
 
   @Override
@@ -315,6 +339,33 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
   private record ConnectionLookup(org.valkyrienskies.horizons.potato_battery.api.network.Connection connection) {}
   private record SimulationPolicy(PowerNodeSimulationMode mode, int subSteps) {}
 
+  private void beginSolveSnapshot() {
+    stagingNodeEnergyData.clear();
+    solveThread = Thread.currentThread();
+    solveInProgress = true;
+  }
+
+  private void publishSolveSnapshot() {
+    HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> oldPublished = publishedNodeEnergyData;
+    publishedNodeEnergyData = stagingNodeEnergyData;
+    stagingNodeEnergyData = oldPublished;
+    solveInProgress = false;
+    solveThread = null;
+  }
+
+  private HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> mutableEnergyDataTarget() {
+    return solveThread == Thread.currentThread() ? stagingNodeEnergyData : publishedNodeEnergyData;
+  }
+
+  private static @Nullable NodeEnergyData getNodeEnergyData(
+      HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> snapshot,
+      IPowerNode node,
+      int port
+  ) {
+    Long2ObjectOpenHashMap<NodeEnergyData> portMap = snapshot.get(node);
+    return portMap == null ? null : portMap.get(port);
+  }
+
   public int getLastRequestedSubsteps() {
     return lastRequestedSubsteps;
   }
@@ -329,6 +380,10 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
 
   public int getAdaptiveDynamicNonlinearSubsteps() {
     return adaptiveDynamicNonlinearSubsteps;
+  }
+
+  public boolean isSolveInProgress() {
+    return solveInProgress;
   }
 
   @Override

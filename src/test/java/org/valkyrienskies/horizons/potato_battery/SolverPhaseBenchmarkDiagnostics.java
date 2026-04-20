@@ -38,7 +38,7 @@ public final class SolverPhaseBenchmarkDiagnostics {
 
     for (SolverSpec solverSpec : solvers) {
       List<String> rows = new ArrayList<>();
-      rows.add("solver,scenario,iterations,wall_micros,topology_micros,stamp_micros,solve_micros,writeback_micros,other_micros,nonlinear_iterations,node_count,branch_count,unknown_count,substeps");
+      rows.add("solver,scenario,iterations,wall_micros,topology_micros,stamp_micros,csc_micros,factor_micros,solve_micros,writeback_micros,other_micros,nonlinear_iterations,node_count,branch_count,unknown_count,substeps,average_nnz,pattern_reuse_ratio");
 
       List<ScenarioResult> results = List.of(
           benchmarkScenario("diode_clamp_bus", solverSpec.factory().get(), iterations, SolverPhaseBenchmarkDiagnostics::buildDiodeClampBus),
@@ -50,15 +50,17 @@ public final class SolverPhaseBenchmarkDiagnostics {
         rows.add(result.toCsvRow(solverSpec.name(), iterations));
         System.out.printf(
             Locale.ROOT,
-            "  %-16s wall=%.3f us stamp=%.3f us solve=%.3f us topo=%.3f us write=%.3f us other=%.3f us iter=%.2f%n",
+            "  %-16s wall=%.3f us stamp=%.3f us csc=%.3f us factor=%.3f us solve=%.3f us topo=%.3f us write=%.3f us iter=%.2f reuse=%.2f%n",
             result.name(),
             result.wallMicros(),
-            result.topologyMicros(),
             result.stampMicros(),
+            result.cscMicros(),
+            result.factorMicros(),
             result.solveMicros(),
+            result.topologyMicros(),
             result.writeBackMicros(),
-            result.otherMicros(),
-            result.averageIterations()
+            result.averageIterations(),
+            result.patternReuseRatio()
         );
       }
 
@@ -82,10 +84,14 @@ public final class SolverPhaseBenchmarkDiagnostics {
     long wallNanos = 0L;
     long topologyNanos = 0L;
     long stampNanos = 0L;
+    long cscNanos = 0L;
+    long factorNanos = 0L;
     long solveNanos = 0L;
     long writeBackNanos = 0L;
     long measuredNanos = 0L;
     long nonlinearIterations = 0L;
+    long totalNonZeros = 0L;
+    long totalPatternReuse = 0L;
     int nodeCount = 0;
     int branchCount = 0;
     int unknownCount = 0;
@@ -97,10 +103,14 @@ public final class SolverPhaseBenchmarkDiagnostics {
       wallNanos += System.nanoTime() - start;
       topologyNanos += result.topologyNanos();
       stampNanos += result.stampNanos();
+      cscNanos += result.cscNanos();
+      factorNanos += result.factorNanos();
       solveNanos += result.solveNanos();
       writeBackNanos += result.writeBackNanos();
       measuredNanos += result.totalMeasuredNanos();
       nonlinearIterations += result.nonlinearIterations();
+      totalNonZeros += result.nonZeros();
+      totalPatternReuse += result.patternReuseCount();
       nodeCount = result.nodeCount();
       branchCount = result.branchCount();
       unknownCount = result.unknownCount();
@@ -112,6 +122,8 @@ public final class SolverPhaseBenchmarkDiagnostics {
         micros(wallNanos, iterations),
         micros(topologyNanos, iterations),
         micros(stampNanos, iterations),
+        micros(cscNanos, iterations),
+        micros(factorNanos, iterations),
         micros(solveNanos, iterations),
         micros(writeBackNanos, iterations),
         micros(Math.max(wallNanos - measuredNanos, 0L), iterations),
@@ -119,7 +131,9 @@ public final class SolverPhaseBenchmarkDiagnostics {
         nodeCount,
         branchCount,
         unknownCount,
-        substeps
+        substeps,
+        (double) totalNonZeros / iterations,
+        (double) totalPatternReuse / Math.max(nonlinearIterations, 1L)
     );
   }
 
@@ -208,6 +222,8 @@ public final class SolverPhaseBenchmarkDiagnostics {
       double wallMicros,
       double topologyMicros,
       double stampMicros,
+      double cscMicros,
+      double factorMicros,
       double solveMicros,
       double writeBackMicros,
       double otherMicros,
@@ -215,18 +231,22 @@ public final class SolverPhaseBenchmarkDiagnostics {
       int nodeCount,
       int branchCount,
       int unknownCount,
-      int substeps
+      int substeps,
+      double averageNonZeros,
+      double patternReuseRatio
   ) {
     private String toCsvRow(String solverName, int iterations) {
       return String.format(
           Locale.ROOT,
-          "%s,%s,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%d",
+          "%s,%s,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%d,%.3f,%.3f",
           solverName,
           name,
           iterations,
           wallMicros,
           topologyMicros,
           stampMicros,
+          cscMicros,
+          factorMicros,
           solveMicros,
           writeBackMicros,
           otherMicros,
@@ -234,7 +254,9 @@ public final class SolverPhaseBenchmarkDiagnostics {
           nodeCount,
           branchCount,
           unknownCount,
-          substeps
+          substeps,
+          averageNonZeros,
+          patternReuseRatio
       );
     }
   }
