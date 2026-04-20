@@ -338,6 +338,1029 @@ public final class CircuitComponents {
     }
   }
 
+  public static final class ComparatorNode extends PowerNode {
+    private final double thresholdVoltage;
+    private final double highVoltage;
+    private final double lowVoltage;
+    private double outputVoltage;
+
+    public ComparatorNode() {
+      this(0.0, 5.0, 0.0);
+    }
+
+    public ComparatorNode(double thresholdVoltage, double highVoltage, double lowVoltage) {
+      super(3);
+      this.thresholdVoltage = thresholdVoltage;
+      this.highVoltage = highVoltage;
+      this.lowVoltage = lowVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double a = network.getVoltageAt(this, 0);
+      double b = network.getVoltageAt(this, 1);
+      outputVoltage = a - b >= thresholdVoltage ? highVoltage : lowVoltage;
+    }
+  }
+
+  public static final class SchmittTriggerNode extends PowerNode {
+    private final double risingThreshold;
+    private final double fallingThreshold;
+    private final double highVoltage;
+    private final double lowVoltage;
+    private boolean high;
+
+    public SchmittTriggerNode(double risingThreshold, double fallingThreshold, double highVoltage, double lowVoltage) {
+      super(2);
+      this.risingThreshold = risingThreshold;
+      this.fallingThreshold = fallingThreshold;
+      this.highVoltage = highVoltage;
+      this.lowVoltage = lowVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return high ? 1L : 0L;
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 1, CircuitStampContext.GROUND, high ? highVoltage : lowVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double input = network.getVoltageAt(this, 0);
+      if (!high && input >= risingThreshold) {
+        high = true;
+      } else if (high && input <= fallingThreshold) {
+        high = false;
+      }
+    }
+  }
+
+  public static final class WindowComparatorNode extends PowerNode {
+    private final double lowThreshold;
+    private final double highThreshold;
+    private final double highVoltage;
+    private double outputVoltage;
+
+    public WindowComparatorNode(double lowThreshold, double highThreshold, double highVoltage) {
+      super(2);
+      this.lowThreshold = lowThreshold;
+      this.highThreshold = highThreshold;
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 1, CircuitStampContext.GROUND, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double input = network.getVoltageAt(this, 0);
+      outputVoltage = input >= lowThreshold && input <= highThreshold ? highVoltage : 0.0;
+    }
+  }
+
+  public static final class LatchNode extends PowerNode {
+    private final double highVoltage;
+    private boolean high;
+
+    public LatchNode() {
+      this(5.0);
+    }
+
+    public LatchNode(double highVoltage) {
+      super(3);
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return high ? 1L : 0L;
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, high ? highVoltage : 0.0);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      if (network.getVoltageAt(this, 1) > highVoltage * 0.5) {
+        high = false;
+      } else if (network.getVoltageAt(this, 0) > highVoltage * 0.5) {
+        high = true;
+      }
+    }
+  }
+
+  public static final class CounterNode extends PowerNode {
+    private final int maxCount;
+    private final double highVoltage;
+    private int count;
+    private double previousClock;
+    private double previousReset;
+
+    public CounterNode(int maxCount, double highVoltage) {
+      super(3);
+      this.maxCount = Math.max(1, maxCount);
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return count;
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, (count / (double) maxCount) * highVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double clock = network.getVoltageAt(this, 0);
+      double reset = network.getVoltageAt(this, 1);
+      if (reset > highVoltage * 0.5 && previousReset <= highVoltage * 0.5) {
+        count = 0;
+      } else if (clock > highVoltage * 0.5 && previousClock <= highVoltage * 0.5) {
+        count = (count + 1) % (maxCount + 1);
+      }
+      previousClock = clock;
+      previousReset = reset;
+    }
+
+    public int getCount() {
+      return count;
+    }
+  }
+
+  public static final class ModCounterNode extends PowerNode {
+    private final int maxCount;
+    private final double highVoltage;
+    private int count;
+    private boolean carryPulse;
+    private double previousClock;
+    private double previousReset;
+
+    public ModCounterNode(int maxCount, double highVoltage) {
+      super(4);
+      this.maxCount = Math.max(1, maxCount);
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 2;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return 31L * count + (carryPulse ? 1L : 0L);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, (count / (double) Math.max(1, maxCount - 1)) * highVoltage);
+      context.stampVoltageSource(1, 3, CircuitStampContext.GROUND, carryPulse ? highVoltage : 0.0);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double clock = network.getVoltageAt(this, 0);
+      double reset = network.getVoltageAt(this, 1);
+      carryPulse = false;
+      if (reset > highVoltage * 0.5 && previousReset <= highVoltage * 0.5) {
+        count = 0;
+      } else if (clock > highVoltage * 0.5 && previousClock <= highVoltage * 0.5) {
+        count++;
+        if (count >= maxCount) {
+          count = 0;
+          carryPulse = true;
+        }
+      }
+      previousClock = clock;
+      previousReset = reset;
+    }
+
+    public int getCount() {
+      return count;
+    }
+
+    public void reset() {
+      count = 0;
+      carryPulse = false;
+      previousClock = 0.0;
+      previousReset = 0.0;
+    }
+  }
+
+  public static final class OscillatorNode extends PowerNode {
+    private final double frequencyHz;
+    private final double dutyCycle;
+    private final double highVoltage;
+    private double phase;
+
+    public OscillatorNode(double frequencyHz, double dutyCycle, double highVoltage) {
+      super(1);
+      this.frequencyHz = frequencyHz;
+      this.dutyCycle = dutyCycle;
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(phase);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 0, CircuitStampContext.GROUND, phase < dutyCycle ? highVoltage : 0.0);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      phase += frequencyHz * timeStepSeconds;
+      phase -= Math.floor(phase);
+    }
+
+    public void reset() {
+      phase = 0.0;
+    }
+  }
+
+  public static final class ClockDividerNode extends PowerNode {
+    private final int divideBy;
+    private final double highVoltage;
+    private int edgeCount;
+    private boolean high;
+    private double previousClock;
+    private double previousReset;
+
+    public ClockDividerNode(int divideBy, double highVoltage) {
+      super(3);
+      this.divideBy = Math.max(1, divideBy);
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return 31L * edgeCount + (high ? 1L : 0L);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, high ? highVoltage : 0.0);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double clock = network.getVoltageAt(this, 0);
+      double reset = network.getVoltageAt(this, 1);
+      if (reset > highVoltage * 0.5 && previousReset <= highVoltage * 0.5) {
+        edgeCount = 0;
+        high = false;
+      } else if (clock > highVoltage * 0.5 && previousClock <= highVoltage * 0.5) {
+        edgeCount++;
+        if (edgeCount >= divideBy) {
+          edgeCount = 0;
+          high = !high;
+        }
+      }
+      previousClock = clock;
+      previousReset = reset;
+    }
+  }
+
+  public static final class MuxNode extends PowerNode {
+    private final double thresholdVoltage;
+    private double outputVoltage;
+
+    public MuxNode() {
+      this(2.5);
+    }
+
+    public MuxNode(double thresholdVoltage) {
+      super(4);
+      this.thresholdVoltage = thresholdVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 3, CircuitStampContext.GROUND, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      outputVoltage = network.getVoltageAt(this, 2) > thresholdVoltage
+          ? network.getVoltageAt(this, 1)
+          : network.getVoltageAt(this, 0);
+    }
+  }
+
+  public static final class OrNode extends PowerNode {
+    private final double thresholdVoltage;
+    private final double highVoltage;
+    private double outputVoltage;
+
+    public OrNode() {
+      this(2.5, 5.0);
+    }
+
+    public OrNode(double thresholdVoltage, double highVoltage) {
+      super(3);
+      this.thresholdVoltage = thresholdVoltage;
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      outputVoltage = network.getVoltageAt(this, 0) > thresholdVoltage || network.getVoltageAt(this, 1) > thresholdVoltage
+          ? highVoltage
+          : 0.0;
+    }
+  }
+
+  public static final class AndNode extends PowerNode {
+    private final double thresholdVoltage;
+    private final double highVoltage;
+    private double outputVoltage;
+
+    public AndNode() {
+      this(2.5, 5.0);
+    }
+
+    public AndNode(double thresholdVoltage, double highVoltage) {
+      super(3);
+      this.thresholdVoltage = thresholdVoltage;
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      outputVoltage = network.getVoltageAt(this, 0) > thresholdVoltage && network.getVoltageAt(this, 1) > thresholdVoltage
+          ? highVoltage
+          : 0.0;
+    }
+  }
+
+  public static final class NotNode extends PowerNode {
+    private final double thresholdVoltage;
+    private final double highVoltage;
+    private double outputVoltage;
+
+    public NotNode() {
+      this(2.5, 5.0);
+    }
+
+    public NotNode(double thresholdVoltage, double highVoltage) {
+      super(2);
+      this.thresholdVoltage = thresholdVoltage;
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 1, CircuitStampContext.GROUND, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      outputVoltage = network.getVoltageAt(this, 0) > thresholdVoltage ? 0.0 : highVoltage;
+    }
+  }
+
+  public static final class MaxNode extends PowerNode {
+    private final double highVoltage;
+    private double outputVoltage;
+
+    public MaxNode(int inputs, double highVoltage) {
+      super(inputs + 1);
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, getPorts() - 1, CircuitStampContext.GROUND, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double max = 0.0;
+      for (int i = 0; i < getPorts() - 1; i++) {
+        max = Math.max(max, network.getVoltageAt(this, i));
+      }
+      outputVoltage = Math.max(0.0, Math.min(highVoltage, max));
+    }
+  }
+
+  public static final class SumClampNode extends PowerNode {
+    private final double clampVoltage;
+    private double outputVoltage;
+
+    public SumClampNode(int inputs, double clampVoltage) {
+      super(inputs + 1);
+      this.clampVoltage = clampVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, getPorts() - 1, CircuitStampContext.GROUND, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double sum = 0.0;
+      for (int i = 0; i < getPorts() - 1; i++) {
+        sum += network.getVoltageAt(this, i);
+      }
+      if (!Double.isFinite(sum)) {
+        sum = 0.0;
+      }
+      outputVoltage = Math.max(-clampVoltage, Math.min(clampVoltage, sum));
+    }
+  }
+
+  public static final class OneShotNode extends PowerNode {
+    private final double pulseSeconds;
+    private final double highVoltage;
+    private final boolean retriggerable;
+    private double remainingSeconds;
+    private double previousTrigger;
+    private double previousReset;
+
+    public OneShotNode(double pulseSeconds, double highVoltage, boolean retriggerable) {
+      super(3);
+      this.pulseSeconds = pulseSeconds;
+      this.highVoltage = highVoltage;
+      this.retriggerable = retriggerable;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(remainingSeconds);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, remainingSeconds > 0.0 ? highVoltage : 0.0);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double trigger = network.getVoltageAt(this, 0);
+      double reset = network.getVoltageAt(this, 1);
+      if (reset > highVoltage * 0.5 && previousReset <= highVoltage * 0.5) {
+        remainingSeconds = 0.0;
+      } else if (trigger > highVoltage * 0.5 && previousTrigger <= highVoltage * 0.5) {
+        if (retriggerable || remainingSeconds <= 0.0) {
+          remainingSeconds = pulseSeconds;
+        }
+      }
+      if (remainingSeconds > 0.0) {
+        remainingSeconds = Math.max(0.0, remainingSeconds - timeStepSeconds);
+      }
+      previousTrigger = trigger;
+      previousReset = reset;
+    }
+
+    public void reset() {
+      remainingSeconds = 0.0;
+      previousTrigger = 0.0;
+      previousReset = 0.0;
+    }
+  }
+
+  public static final class ToneBurstNode extends PowerNode {
+    private final double frequencyHz;
+    private final double pulseSeconds;
+    private final double amplitudeVoltage;
+    private double previousTriggerA;
+    private double previousTriggerB;
+    private double remainingSeconds;
+    private double phase;
+    private boolean high;
+    private double outputVoltage;
+
+    public ToneBurstNode(double frequencyHz, double pulseSeconds, double amplitudeVoltage) {
+      super(4);
+      this.frequencyHz = frequencyHz;
+      this.pulseSeconds = pulseSeconds;
+      this.amplitudeVoltage = amplitudeVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      long fingerprint = Double.doubleToLongBits(remainingSeconds);
+      return 31L * fingerprint + (high ? 1L : 0L);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 3, CircuitStampContext.GROUND, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double triggerA = network.getVoltageAt(this, 0);
+      double triggerB = network.getVoltageAt(this, 1);
+      double inhibit = network.getVoltageAt(this, 2);
+      if (inhibit <= amplitudeVoltage * 0.5
+          && ((triggerA > amplitudeVoltage * 0.5 && previousTriggerA <= amplitudeVoltage * 0.5)
+          || (triggerB > amplitudeVoltage * 0.5 && previousTriggerB <= amplitudeVoltage * 0.5))) {
+        remainingSeconds = pulseSeconds;
+        phase = 0.0;
+        high = false;
+      }
+      previousTriggerA = triggerA;
+      previousTriggerB = triggerB;
+      if (inhibit > amplitudeVoltage * 0.5 || remainingSeconds <= 0.0) {
+        outputVoltage = 0.0;
+        remainingSeconds = Math.max(0.0, remainingSeconds - timeStepSeconds);
+        return;
+      }
+      remainingSeconds = Math.max(0.0, remainingSeconds - timeStepSeconds);
+      phase += frequencyHz * timeStepSeconds;
+      if (phase >= 0.5) {
+        phase -= 0.5;
+        high = !high;
+      }
+      double envelope = Math.min(1.0, remainingSeconds / pulseSeconds);
+      outputVoltage = (high ? 1.0 : -1.0) * envelope * amplitudeVoltage;
+    }
+
+    public void reset() {
+      previousTriggerA = 0.0;
+      previousTriggerB = 0.0;
+      remainingSeconds = 0.0;
+      phase = 0.0;
+      high = false;
+      outputVoltage = 0.0;
+    }
+  }
+
+  public static final class PulseAccumulatingScaleNode extends PowerNode {
+    private final double incrementPerPulse;
+    private final double maxBoost;
+    private final double highVoltage;
+    private double manualScale = 1.0;
+    private double accumulatedBoost;
+    private double previousPulse;
+
+    public PulseAccumulatingScaleNode(double incrementPerPulse, double maxBoost, double highVoltage) {
+      super(3);
+      this.incrementPerPulse = Math.max(0.0, incrementPerPulse);
+      this.maxBoost = Math.max(0.0, maxBoost);
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return 31L * Double.doubleToLongBits(manualScale) + Double.doubleToLongBits(accumulatedBoost);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, scale() * highVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double pulse = network.getVoltageAt(this, 0);
+      double reset = network.getVoltageAt(this, 1);
+      if (reset > highVoltage * 0.5) {
+        accumulatedBoost = 0.0;
+      } else if (pulse > highVoltage * 0.5 && previousPulse <= highVoltage * 0.5) {
+        accumulatedBoost = Math.min(maxBoost, accumulatedBoost + incrementPerPulse);
+      }
+      previousPulse = pulse;
+    }
+
+    public void setManualScale(double manualScale) {
+      this.manualScale = Math.max(0.25, manualScale);
+    }
+
+    public void reset() {
+      accumulatedBoost = 0.0;
+      previousPulse = 0.0;
+    }
+
+    public double scale() {
+      return manualScale * (1.0 + accumulatedBoost);
+    }
+  }
+
+  public static final class QuantizedSlewNode extends PowerNode {
+    private final int steps;
+    private final double highVoltage;
+    private int step;
+
+    public QuantizedSlewNode(int steps, double highVoltage) {
+      super(2);
+      this.steps = Math.max(1, steps);
+      this.highVoltage = highVoltage;
+      this.step = this.steps / 2;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return step;
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 1, CircuitStampContext.GROUND, (step / (double) steps) * highVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      int targetStep = (int) Math.round(
+          Math.max(0.0, Math.min(1.0, network.getVoltageAt(this, 0) / Math.max(highVoltage, 1.0e-9))) * steps
+      );
+      if (targetStep > step) {
+        step++;
+      } else if (targetStep < step) {
+        step--;
+      }
+    }
+
+    public void reset() {
+      step = steps / 2;
+    }
+
+    public int getStep() {
+      return step;
+    }
+  }
+
+  public static final class RectangleRasterNode extends PowerNode {
+    private final double halfWidth;
+    private final double halfHeight;
+    private final double highVoltage;
+    private double outputVoltage;
+
+    public RectangleRasterNode(double halfWidth, double halfHeight, double highVoltage) {
+      super(5);
+      this.halfWidth = Math.max(0.0, halfWidth);
+      this.halfHeight = Math.max(0.0, halfHeight);
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 4, CircuitStampContext.GROUND, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double x = Math.max(0.0, Math.min(1.0, network.getVoltageAt(this, 0) / highVoltage));
+      double y = Math.max(0.0, Math.min(1.0, network.getVoltageAt(this, 1) / highVoltage));
+      double centerX = Math.max(0.0, Math.min(1.0, network.getVoltageAt(this, 2) / highVoltage));
+      double centerY = Math.max(0.0, Math.min(1.0, network.getVoltageAt(this, 3) / highVoltage));
+      outputVoltage = Math.abs(x - centerX) <= halfWidth && Math.abs(y - centerY) <= halfHeight ? highVoltage : 0.0;
+    }
+  }
+
+  public static final class VerticalMeterNode extends PowerNode {
+    private final double minX;
+    private final double maxX;
+    private final double topY;
+    private final double fullHeight;
+    private final double highVoltage;
+    private double outputVoltage;
+
+    public VerticalMeterNode(double minX, double maxX, double topY, double fullHeight, double highVoltage) {
+      super(4);
+      this.minX = minX;
+      this.maxX = maxX;
+      this.topY = topY;
+      this.fullHeight = Math.max(0.0, fullHeight);
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 3, CircuitStampContext.GROUND, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double x = Math.max(0.0, Math.min(1.0, network.getVoltageAt(this, 0) / highVoltage));
+      double y = Math.max(0.0, Math.min(1.0, network.getVoltageAt(this, 1) / highVoltage));
+      double level = Math.max(0.0, Math.min(1.0, network.getVoltageAt(this, 2) / highVoltage));
+      double minY = Math.max(0.0, topY - level * fullHeight);
+      outputVoltage = x >= minX && x <= maxX && y <= topY && y >= minY ? highVoltage : 0.0;
+    }
+  }
+
+  public static final class StripeRasterNode extends PowerNode {
+    private final double centerX;
+    private final double halfWidth;
+    private final int segmentCount;
+    private final double highVoltage;
+    private double outputVoltage;
+
+    public StripeRasterNode(double centerX, double halfWidth, int segmentCount, double highVoltage) {
+      super(3);
+      this.centerX = centerX;
+      this.halfWidth = Math.max(0.0, halfWidth);
+      this.segmentCount = Math.max(1, segmentCount);
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      double x = Math.max(0.0, Math.min(1.0, network.getVoltageAt(this, 0) / highVoltage));
+      double y = Math.max(0.0, Math.min(1.0, network.getVoltageAt(this, 1) / highVoltage));
+      outputVoltage = Math.abs(x - centerX) <= halfWidth && ((int) Math.floor(y * segmentCount) % 2 == 0)
+          ? highVoltage
+          : 0.0;
+    }
+  }
+
   public static final class DiodeNode extends PowerNode {
     private static final double DEFAULT_SATURATION_CURRENT = 1.0e-12;
     private static final double DEFAULT_THERMAL_VOLTAGE = 0.02585;
