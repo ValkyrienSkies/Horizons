@@ -22,6 +22,7 @@ abstract class AbstractStampingSolver implements IPBSolver {
   private static final int MAX_NONLINEAR_ITERATIONS = 80;
   private static final double DEFAULT_VOLTAGE_CONVERGENCE = 1.0e-6;
   private static final double DEFAULT_CURRENT_CONVERGENCE = 1.0e-8;
+  private static final double PORT_GMIN_CONDUCTANCE = 1.0e-9;
   private static final double MIN_VOLTAGE_SCALE = 1.0;
   private static final double MIN_CURRENT_SCALE = 1.0e-3;
   private static final double MAX_RELATIVE_VOLTAGE_STEP = 0.75;
@@ -77,6 +78,9 @@ abstract class AbstractStampingSolver implements IPBSolver {
       }
       double[] solution = solveNonlinearSystem(network, topology, timeStep, accumulator);
       if (solution == null) {
+        if (accumulator != null) {
+          accumulator.solveFailed = true;
+        }
         long writeBackStart = accumulator == null ? 0L : System.nanoTime();
         writeBackWithoutSolve(network, topology);
         if (accumulator instanceof StepPhaseAccumulator phaseAccumulator) {
@@ -151,6 +155,15 @@ abstract class AbstractStampingSolver implements IPBSolver {
       for (NodeTopology nodeTopology : topology.nodeTopologies) {
         nodeTopology.node.stamp(new StampContextImpl(nodeTopology, matrix, rhs, timeStep, guess));
       }
+      applyPortGmin(matrix, topology);
+      if (accumulator != null) {
+        MatrixStructureDiagnostics diagnostics = analyzeMatrixStructure(matrix);
+        accumulator.unknownCount = diagnostics.unknownCount;
+        accumulator.nonZeroCount = diagnostics.nonZeroCount;
+        accumulator.zeroRowCount = diagnostics.zeroRowCount;
+        accumulator.zeroColumnCount = diagnostics.zeroColumnCount;
+        accumulator.missingDiagonalCount = diagnostics.missingDiagonalCount;
+      }
       topology.captureMatrixPattern(matrix);
       if (accumulator instanceof StepPhaseAccumulator phaseAccumulator) {
         phaseAccumulator.stampNanos += System.nanoTime() - stampStart;
@@ -201,11 +214,33 @@ abstract class AbstractStampingSolver implements IPBSolver {
     private final int nonlinearIterations;
     private final int substeps;
     private final boolean iterationLimitHit;
+    private final boolean solveFailed;
+    private final int unknownCount;
+    private final int nonZeroCount;
+    private final int zeroRowCount;
+    private final int zeroColumnCount;
+    private final int missingDiagonalCount;
 
-    private StepSolveFeedback(int nonlinearIterations, int substeps, boolean iterationLimitHit) {
+    private StepSolveFeedback(
+        int nonlinearIterations,
+        int substeps,
+        boolean iterationLimitHit,
+        boolean solveFailed,
+        int unknownCount,
+        int nonZeroCount,
+        int zeroRowCount,
+        int zeroColumnCount,
+        int missingDiagonalCount
+    ) {
       this.nonlinearIterations = nonlinearIterations;
       this.substeps = substeps;
       this.iterationLimitHit = iterationLimitHit;
+      this.solveFailed = solveFailed;
+      this.unknownCount = unknownCount;
+      this.nonZeroCount = nonZeroCount;
+      this.zeroRowCount = zeroRowCount;
+      this.zeroColumnCount = zeroColumnCount;
+      this.missingDiagonalCount = missingDiagonalCount;
     }
 
     public int nonlinearIterations() {
@@ -218,6 +253,30 @@ abstract class AbstractStampingSolver implements IPBSolver {
 
     public boolean iterationLimitHit() {
       return iterationLimitHit;
+    }
+
+    public boolean solveFailed() {
+      return solveFailed;
+    }
+
+    public int unknownCount() {
+      return unknownCount;
+    }
+
+    public int nonZeroCount() {
+      return nonZeroCount;
+    }
+
+    public int zeroRowCount() {
+      return zeroRowCount;
+    }
+
+    public int zeroColumnCount() {
+      return zeroColumnCount;
+    }
+
+    public int missingDiagonalCount() {
+      return missingDiagonalCount;
     }
   }
 
@@ -327,11 +386,43 @@ abstract class AbstractStampingSolver implements IPBSolver {
     protected int nonlinearIterations;
     protected int substeps;
     protected boolean iterationLimitHit;
+    protected boolean solveFailed;
+    protected int unknownCount;
+    protected int nonZeroCount;
+    protected int zeroRowCount;
+    protected int zeroColumnCount;
+    protected int missingDiagonalCount;
   }
 
   private static final class StepFeedbackAccumulator extends StepAccumulator {
     private StepSolveFeedback finish() {
-      return new StepSolveFeedback(nonlinearIterations, substeps, iterationLimitHit);
+      return new StepSolveFeedback(
+          nonlinearIterations,
+          substeps,
+          iterationLimitHit,
+          solveFailed,
+          unknownCount,
+          nonZeroCount,
+          zeroRowCount,
+          zeroColumnCount,
+          missingDiagonalCount
+      );
+    }
+  }
+
+  private static final class MatrixStructureDiagnostics {
+    private final int unknownCount;
+    private final int nonZeroCount;
+    private final int zeroRowCount;
+    private final int zeroColumnCount;
+    private final int missingDiagonalCount;
+
+    private MatrixStructureDiagnostics(int unknownCount, int nonZeroCount, int zeroRowCount, int zeroColumnCount, int missingDiagonalCount) {
+      this.unknownCount = unknownCount;
+      this.nonZeroCount = nonZeroCount;
+      this.zeroRowCount = zeroRowCount;
+      this.zeroColumnCount = zeroColumnCount;
+      this.missingDiagonalCount = missingDiagonalCount;
     }
   }
 
@@ -615,6 +706,54 @@ abstract class AbstractStampingSolver implements IPBSolver {
       cachedCscMatrix = new CscMatrix(dimension, columnPointers, rowIndices, initialValues);
       return new MatrixPattern(dimension, columnPointers, rowIndices, indexByKey);
     }
+  }
+
+  private static void applyPortGmin(MatrixAccumulator matrix, SolveTopology topology) {
+    for (NodeTopology nodeTopology : topology.nodeTopologies) {
+      for (int equation : nodeTopology.portEquations) {
+        if (equation >= 0) {
+          matrix.add(equation, equation, PORT_GMIN_CONDUCTANCE);
+        }
+      }
+    }
+  }
+
+  private static MatrixStructureDiagnostics analyzeMatrixStructure(MatrixAccumulator matrix) {
+    CscMatrix csc = matrix.toCscMatrix();
+    int dimension = csc.dimension();
+    int[] rowCounts = new int[dimension];
+    int[] columnCounts = new int[dimension];
+    boolean[] diagonalPresent = new boolean[dimension];
+
+    for (int column = 0; column < dimension; column++) {
+      int start = csc.columnPointers()[column];
+      int end = csc.columnPointers()[column + 1];
+      columnCounts[column] = end - start;
+      for (int index = start; index < end; index++) {
+        int row = csc.rowIndices()[index];
+        rowCounts[row]++;
+        if (row == column) {
+          diagonalPresent[column] = true;
+        }
+      }
+    }
+
+    int zeroRows = 0;
+    int zeroColumns = 0;
+    int missingDiagonals = 0;
+    for (int i = 0; i < dimension; i++) {
+      if (rowCounts[i] == 0) {
+        zeroRows++;
+      }
+      if (columnCounts[i] == 0) {
+        zeroColumns++;
+      }
+      if (!diagonalPresent[i]) {
+        missingDiagonals++;
+      }
+    }
+
+    return new MatrixStructureDiagnostics(dimension, csc.values().length, zeroRows, zeroColumns, missingDiagonals);
   }
 
   protected record CscMatrix(int dimension, int[] columnPointers, int[] rowIndices, double[] values) {}

@@ -21,6 +21,8 @@ public final class CircuitComponents {
   private static final double MOS_GATE_LEAKAGE = 1.0e-12;
   private static final double MOS_CHANNEL_LENGTH_MODULATION = 0.02;
   private static final double BJT_OUTPUT_CONDUCTANCE = 1.0e-8;
+  private static final double BEHAVIORAL_OUTPUT_RESISTANCE = 10.0;
+  private static final double BEHAVIORAL_OUTPUT_CONDUCTANCE = 1.0 / BEHAVIORAL_OUTPUT_RESISTANCE;
 
   private CircuitComponents() {
   }
@@ -106,6 +108,11 @@ public final class CircuitComponents {
     if (constantCurrent != 0.0) {
       context.stampCurrentSource(positivePort, negativePort, constantCurrent);
     }
+  }
+
+  private static void stampBehavioralOutput(CircuitStampContext context, int outputPort, double targetVoltage) {
+    context.stampConductance(outputPort, CircuitStampContext.GROUND, BEHAVIORAL_OUTPUT_CONDUCTANCE);
+    context.stampCurrentSource(CircuitStampContext.GROUND, outputPort, BEHAVIORAL_OUTPUT_CONDUCTANCE * targetVoltage);
   }
 
   public static final class FixedStepNetwork extends PowerNetworkServer {
@@ -357,7 +364,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -372,7 +379,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 2, outputVoltage);
     }
 
     @Override
@@ -400,7 +407,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -415,7 +422,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 1, CircuitStampContext.GROUND, high ? highVoltage : lowVoltage);
+      stampBehavioralOutput(context, 1, high ? highVoltage : lowVoltage);
     }
 
     @Override
@@ -444,7 +451,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -459,7 +466,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 1, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 1, outputVoltage);
     }
 
     @Override
@@ -484,7 +491,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -499,7 +506,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, high ? highVoltage : 0.0);
+      stampBehavioralOutput(context, 2, high ? highVoltage : 0.0);
     }
 
     @Override
@@ -531,7 +538,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -546,7 +553,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, (count / (double) maxCount) * highVoltage);
+      stampBehavioralOutput(context, 2, (count / (double) maxCount) * highVoltage);
     }
 
     @Override
@@ -583,7 +590,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 2;
+      return 0;
     }
 
     @Override
@@ -598,8 +605,8 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, (count / (double) Math.max(1, maxCount - 1)) * highVoltage);
-      context.stampVoltageSource(1, 3, CircuitStampContext.GROUND, carryPulse ? highVoltage : 0.0);
+      stampBehavioralOutput(context, 2, (count / (double) Math.max(1, maxCount - 1)) * highVoltage);
+      stampBehavioralOutput(context, 3, carryPulse ? highVoltage : 0.0);
     }
 
     @Override
@@ -647,7 +654,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -662,7 +669,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 0, CircuitStampContext.GROUND, phase < dutyCycle ? highVoltage : 0.0);
+      stampBehavioralOutput(context, 0, phase < dutyCycle ? highVoltage : 0.0);
     }
 
     @Override
@@ -692,7 +699,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -707,7 +714,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, high ? highVoltage : 0.0);
+      stampBehavioralOutput(context, 2, high ? highVoltage : 0.0);
     }
 
     @Override
@@ -744,7 +751,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -759,7 +766,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 3, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 3, outputVoltage);
     }
 
     @Override
@@ -787,7 +794,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -802,7 +809,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 2, outputVoltage);
     }
 
     @Override
@@ -830,7 +837,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -845,7 +852,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 2, outputVoltage);
     }
 
     @Override
@@ -873,7 +880,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -888,12 +895,225 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 1, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 1, outputVoltage);
     }
 
     @Override
     public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
       outputVoltage = network.getVoltageAt(this, 0) > thresholdVoltage ? 0.0 : highVoltage;
+    }
+  }
+
+  public static final class BufferNode extends PowerNode {
+    private final double thresholdVoltage;
+    private final double highVoltage;
+    private double outputVoltage;
+
+    public BufferNode() {
+      this(2.5, 5.0);
+    }
+
+    public BufferNode(double thresholdVoltage, double highVoltage) {
+      super(2);
+      this.thresholdVoltage = thresholdVoltage;
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 0;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      stampBehavioralOutput(context, 1, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      outputVoltage = network.getVoltageAt(this, 0) > thresholdVoltage ? highVoltage : 0.0;
+    }
+  }
+
+  public static final class NandNode extends PowerNode {
+    private final double thresholdVoltage;
+    private final double highVoltage;
+    private double outputVoltage;
+
+    public NandNode() {
+      this(2.5, 5.0);
+    }
+
+    public NandNode(double thresholdVoltage, double highVoltage) {
+      super(3);
+      this.thresholdVoltage = thresholdVoltage;
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 0;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      stampBehavioralOutput(context, 2, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      outputVoltage = network.getVoltageAt(this, 0) > thresholdVoltage && network.getVoltageAt(this, 1) > thresholdVoltage
+          ? 0.0
+          : highVoltage;
+    }
+  }
+
+  public static final class NorNode extends PowerNode {
+    private final double thresholdVoltage;
+    private final double highVoltage;
+    private double outputVoltage;
+
+    public NorNode() {
+      this(2.5, 5.0);
+    }
+
+    public NorNode(double thresholdVoltage, double highVoltage) {
+      super(3);
+      this.thresholdVoltage = thresholdVoltage;
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 0;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      stampBehavioralOutput(context, 2, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      outputVoltage = network.getVoltageAt(this, 0) > thresholdVoltage || network.getVoltageAt(this, 1) > thresholdVoltage
+          ? 0.0
+          : highVoltage;
+    }
+  }
+
+  public static final class XorNode extends PowerNode {
+    private final double thresholdVoltage;
+    private final double highVoltage;
+    private double outputVoltage;
+
+    public XorNode() {
+      this(2.5, 5.0);
+    }
+
+    public XorNode(double thresholdVoltage, double highVoltage) {
+      super(3);
+      this.thresholdVoltage = thresholdVoltage;
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 0;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      stampBehavioralOutput(context, 2, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      boolean a = network.getVoltageAt(this, 0) > thresholdVoltage;
+      boolean b = network.getVoltageAt(this, 1) > thresholdVoltage;
+      outputVoltage = a ^ b ? highVoltage : 0.0;
+    }
+  }
+
+  public static final class XnorNode extends PowerNode {
+    private final double thresholdVoltage;
+    private final double highVoltage;
+    private double outputVoltage;
+
+    public XnorNode() {
+      this(2.5, 5.0);
+    }
+
+    public XnorNode(double thresholdVoltage, double highVoltage) {
+      super(3);
+      this.thresholdVoltage = thresholdVoltage;
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 0;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(outputVoltage);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      stampBehavioralOutput(context, 2, outputVoltage);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      boolean a = network.getVoltageAt(this, 0) > thresholdVoltage;
+      boolean b = network.getVoltageAt(this, 1) > thresholdVoltage;
+      outputVoltage = a == b ? highVoltage : 0.0;
     }
   }
 
@@ -908,7 +1128,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -923,7 +1143,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, getPorts() - 1, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, getPorts() - 1, outputVoltage);
     }
 
     @Override
@@ -947,7 +1167,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -962,7 +1182,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, getPorts() - 1, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, getPorts() - 1, outputVoltage);
     }
 
     @Override
@@ -995,7 +1215,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1010,7 +1230,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, remainingSeconds > 0.0 ? highVoltage : 0.0);
+      stampBehavioralOutput(context, 2, remainingSeconds > 0.0 ? highVoltage : 0.0);
     }
 
     @Override
@@ -1058,7 +1278,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1074,7 +1294,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 3, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 3, outputVoltage);
     }
 
     @Override
@@ -1133,7 +1353,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1148,7 +1368,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, scale() * highVoltage);
+      stampBehavioralOutput(context, 2, scale() * highVoltage);
     }
 
     @Override
@@ -1191,7 +1411,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1206,7 +1426,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 1, CircuitStampContext.GROUND, (step / (double) steps) * highVoltage);
+      stampBehavioralOutput(context, 1, (step / (double) steps) * highVoltage);
     }
 
     @Override
@@ -1245,7 +1465,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1260,7 +1480,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 4, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 4, outputVoltage);
     }
 
     @Override
@@ -1292,7 +1512,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1307,7 +1527,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 3, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 3, outputVoltage);
     }
 
     @Override
@@ -1337,7 +1557,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1352,7 +1572,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 2, outputVoltage);
     }
 
     @Override
@@ -1377,7 +1597,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1392,7 +1612,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, heldVoltage);
+      stampBehavioralOutput(context, 2, heldVoltage);
     }
 
     @Override
@@ -1422,7 +1642,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1437,7 +1657,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, deltaVoltage);
+      stampBehavioralOutput(context, 2, deltaVoltage);
     }
 
     @Override
@@ -1470,7 +1690,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1485,7 +1705,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 1, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 1, outputVoltage);
     }
 
     @Override
@@ -1505,7 +1725,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1520,7 +1740,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 2, outputVoltage);
     }
 
     @Override
@@ -1542,7 +1762,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1557,7 +1777,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 2, outputVoltage);
     }
 
     @Override
@@ -1584,7 +1804,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1599,7 +1819,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, accumulatedValue);
+      stampBehavioralOutput(context, 2, accumulatedValue);
     }
 
     @Override
@@ -1632,7 +1852,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1647,7 +1867,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 2, CircuitStampContext.GROUND, pulseVoltage);
+      stampBehavioralOutput(context, 2, pulseVoltage);
     }
 
     @Override
@@ -1682,7 +1902,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1697,7 +1917,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 3, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 3, outputVoltage);
     }
 
     @Override
@@ -1722,7 +1942,7 @@ public final class CircuitComponents {
 
     @Override
     public int getVoltageSourceCount() {
-      return 1;
+      return 0;
     }
 
     @Override
@@ -1737,7 +1957,7 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      context.stampVoltageSource(0, 1, CircuitStampContext.GROUND, outputVoltage);
+      stampBehavioralOutput(context, 1, outputVoltage);
     }
 
     @Override
@@ -1758,6 +1978,290 @@ public final class CircuitComponents {
         }
       }
       outputVoltage = reflected;
+    }
+  }
+
+  public static final class BouncingStepperNode extends PowerNode {
+    private final int cells;
+    private final double baseVelocity;
+    private final double highVoltage;
+    private final int initialDirection;
+    private int cell;
+    private int direction;
+    private double stepAccumulator;
+    private boolean bouncePulse;
+
+    public BouncingStepperNode(int cells, double baseVelocity, double highVoltage, int initialDirection) {
+      super(8);
+      this.cells = Math.max(2, cells);
+      this.baseVelocity = Math.abs(baseVelocity);
+      this.highVoltage = highVoltage;
+      this.initialDirection = initialDirection >= 0 ? 1 : -1;
+      reset();
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 0;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_NONLINEAR;
+    }
+
+    @Override
+    public double getSuggestedMaxTimeStepSeconds() {
+      return 1.0 / 3000.0;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return 31L * cell + direction;
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      stampBehavioralOutput(context, 5, (cell / (double) (cells - 1)) * highVoltage);
+      stampBehavioralOutput(context, 6, bouncePulse ? highVoltage : 0.0);
+      stampBehavioralOutput(context, 7, direction > 0 ? highVoltage : 0.0);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      if (network.getVoltageAt(this, 4) > highVoltage * 0.5) {
+        reset();
+        return;
+      }
+      bouncePulse = false;
+      if (network.getVoltageAt(this, 1) > highVoltage * 0.5) {
+        return;
+      }
+      if (network.getVoltageAt(this, 2) > highVoltage * 0.5) {
+        double directionValue = (network.getVoltageAt(this, 3) / Math.max(highVoltage, 1.0e-9)) * 2.0 - 1.0;
+        direction = directionValue >= 0.0 ? 1 : -1;
+      }
+      double speedScale = Math.max(0.0, network.getVoltageAt(this, 0) / Math.max(highVoltage, 1.0e-9));
+      stepAccumulator += baseVelocity * (cells - 1) * speedScale * timeStepSeconds;
+      while (stepAccumulator >= 1.0) {
+        stepAccumulator -= 1.0;
+        cell += direction;
+        if (cell <= 0) {
+          cell = 0;
+          direction = 1;
+          bouncePulse = true;
+        } else if (cell >= cells - 1) {
+          cell = cells - 1;
+          direction = -1;
+          bouncePulse = true;
+        }
+      }
+    }
+
+    public void reset() {
+      cell = (cells - 1) / 2;
+      direction = initialDirection;
+      stepAccumulator = 0.0;
+      bouncePulse = false;
+    }
+
+    public int getCell() {
+      return cell;
+    }
+
+    public int getDirection() {
+      return direction;
+    }
+  }
+
+  public static final class EdgePulsingStepperNode extends PowerNode {
+    private final int cells;
+    private final double baseVelocity;
+    private final double highVoltage;
+    private final int initialDirection;
+    private int cell;
+    private int direction;
+    private double stepAccumulator;
+    private boolean leftEdgePulse;
+    private boolean rightEdgePulse;
+
+    public EdgePulsingStepperNode(int cells, double baseVelocity, double highVoltage, int initialDirection) {
+      super(9);
+      this.cells = Math.max(2, cells);
+      this.baseVelocity = Math.abs(baseVelocity);
+      this.highVoltage = highVoltage;
+      this.initialDirection = initialDirection >= 0 ? 1 : -1;
+      reset();
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 0;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_NONLINEAR;
+    }
+
+    @Override
+    public double getSuggestedMaxTimeStepSeconds() {
+      return 1.0 / 3000.0;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      long fingerprint = 31L * cell + direction;
+      if (leftEdgePulse) {
+        fingerprint = 31L * fingerprint + 1L;
+      }
+      if (rightEdgePulse) {
+        fingerprint = 31L * fingerprint + 2L;
+      }
+      return fingerprint;
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      stampBehavioralOutput(context, 5, (cell / (double) (cells - 1)) * highVoltage);
+      stampBehavioralOutput(context, 6, leftEdgePulse ? highVoltage : 0.0);
+      stampBehavioralOutput(context, 7, rightEdgePulse ? highVoltage : 0.0);
+      stampBehavioralOutput(context, 8, direction > 0 ? highVoltage : 0.0);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      if (network.getVoltageAt(this, 4) > highVoltage * 0.5) {
+        reset();
+        return;
+      }
+      leftEdgePulse = false;
+      rightEdgePulse = false;
+      if (network.getVoltageAt(this, 1) > highVoltage * 0.5) {
+        return;
+      }
+      if (network.getVoltageAt(this, 2) > highVoltage * 0.5) {
+        double directionValue = (network.getVoltageAt(this, 3) / Math.max(highVoltage, 1.0e-9)) * 2.0 - 1.0;
+        direction = directionValue >= 0.0 ? 1 : -1;
+      }
+      double speedScale = Math.max(0.0, network.getVoltageAt(this, 0) / Math.max(highVoltage, 1.0e-9));
+      stepAccumulator += baseVelocity * (cells - 1) * speedScale * timeStepSeconds;
+      while (stepAccumulator >= 1.0) {
+        stepAccumulator -= 1.0;
+        int nextCell = cell + direction;
+        if (nextCell < 0) {
+          cell = 0;
+          leftEdgePulse = true;
+          break;
+        } else if (nextCell >= cells) {
+          cell = cells - 1;
+          rightEdgePulse = true;
+          break;
+        } else {
+          cell = nextCell;
+        }
+      }
+    }
+
+    public void reset() {
+      cell = (cells - 1) / 2;
+      direction = initialDirection;
+      stepAccumulator = 0.0;
+      leftEdgePulse = false;
+      rightEdgePulse = false;
+    }
+  }
+
+  public static final class PaddleCollisionLogicNode extends PowerNode {
+    private final double paddleHalfHeight;
+    private final double paddlePadding;
+    private final double highVoltage;
+    private boolean hitPulse;
+    private double deflectionVoltage;
+    private boolean directionSetPulse;
+    private double directionValueVoltage;
+    private boolean leftScorePulse;
+    private boolean rightScorePulse;
+    private boolean centerResetPulse;
+
+    public PaddleCollisionLogicNode(double paddleHalfHeight, double paddlePadding, double highVoltage) {
+      super(12);
+      this.paddleHalfHeight = paddleHalfHeight;
+      this.paddlePadding = paddlePadding;
+      this.highVoltage = highVoltage;
+    }
+
+    @Override
+    public int getVoltageSourceCount() {
+      return 0;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      long fingerprint = Double.doubleToLongBits(deflectionVoltage);
+      fingerprint = 31L * fingerprint + Double.doubleToLongBits(directionValueVoltage);
+      if (hitPulse) fingerprint = 31L * fingerprint + 1L;
+      if (directionSetPulse) fingerprint = 31L * fingerprint + 2L;
+      if (leftScorePulse) fingerprint = 31L * fingerprint + 3L;
+      if (rightScorePulse) fingerprint = 31L * fingerprint + 4L;
+      if (centerResetPulse) fingerprint = 31L * fingerprint + 5L;
+      return fingerprint;
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      stampBehavioralOutput(context, 5, hitPulse ? highVoltage : 0.0);
+      stampBehavioralOutput(context, 6, deflectionVoltage);
+      stampBehavioralOutput(context, 7, directionSetPulse ? highVoltage : 0.0);
+      stampBehavioralOutput(context, 8, directionValueVoltage);
+      stampBehavioralOutput(context, 9, leftScorePulse ? highVoltage : 0.0);
+      stampBehavioralOutput(context, 10, rightScorePulse ? highVoltage : 0.0);
+      stampBehavioralOutput(context, 11, centerResetPulse ? highVoltage : 0.0);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      hitPulse = false;
+      deflectionVoltage = 0.0;
+      directionSetPulse = false;
+      directionValueVoltage = 0.0;
+      leftScorePulse = false;
+      rightScorePulse = false;
+      centerResetPulse = false;
+
+      double leftPaddle = network.getVoltageAt(this, 0) / Math.max(highVoltage, 1.0e-9);
+      double rightPaddle = network.getVoltageAt(this, 1) / Math.max(highVoltage, 1.0e-9);
+      double ballY = network.getVoltageAt(this, 2) / Math.max(highVoltage, 1.0e-9);
+      boolean leftEdge = network.getVoltageAt(this, 3) > highVoltage * 0.5;
+      boolean rightEdge = network.getVoltageAt(this, 4) > highVoltage * 0.5;
+
+      if (!leftEdge && !rightEdge) {
+        return;
+      }
+
+      double paddle = leftEdge ? leftPaddle : rightPaddle;
+      double top = paddle - (paddleHalfHeight + paddlePadding);
+      double bottom = paddle + (paddleHalfHeight + paddlePadding);
+      boolean hit = ballY >= top && ballY <= bottom;
+      if (hit) {
+        hitPulse = true;
+        directionSetPulse = true;
+        directionValueVoltage = leftEdge ? highVoltage : 0.0;
+        double deflection = Math.max(0.0, Math.min(1.0, 0.5 + (ballY - paddle) / (paddleHalfHeight * 2.0)));
+        deflectionVoltage = deflection * highVoltage;
+      } else {
+        centerResetPulse = true;
+        if (leftEdge) {
+          rightScorePulse = true;
+        } else {
+          leftScorePulse = true;
+        }
+      }
     }
   }
 

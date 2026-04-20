@@ -10,10 +10,20 @@ public final class SolverPhaseDiagnostics {
   public static SolveFeedback stepWithFeedback(IPBSolver solver, IPowerNetwork<?> network, int subSteps) {
     if (!(solver instanceof AbstractStampingSolver stampingSolver)) {
       solver.step(network, subSteps);
-      return new SolveFeedback(0, Math.max(subSteps, 1), false);
+      return new SolveFeedback(0, Math.max(subSteps, 1), false, false, 0, 0, 0, 0, 0);
     }
     AbstractStampingSolver.StepSolveFeedback feedback = stampingSolver.stepWithFeedback(network, subSteps);
-    return new SolveFeedback(feedback.nonlinearIterations(), feedback.substeps(), feedback.iterationLimitHit());
+    return new SolveFeedback(
+        feedback.nonlinearIterations(),
+        feedback.substeps(),
+        feedback.iterationLimitHit(),
+        feedback.solveFailed(),
+        feedback.unknownCount(),
+        feedback.nonZeroCount(),
+        feedback.zeroRowCount(),
+        feedback.zeroColumnCount(),
+        feedback.missingDiagonalCount()
+    );
   }
 
   public static PhaseBenchmarkResult benchmarkStep(IPBSolver solver, IPowerNetwork<?> network, int subSteps) {
@@ -59,6 +69,12 @@ public final class SolverPhaseDiagnostics {
   public record SolveFeedback(
       int nonlinearIterations,
       int substeps,
-      boolean iterationLimitHit
+      boolean iterationLimitHit,
+      boolean solveFailed,
+      int unknownCount,
+      int nonZeroCount,
+      int zeroRowCount,
+      int zeroColumnCount,
+      int missingDiagonalCount
   ) {}
 }

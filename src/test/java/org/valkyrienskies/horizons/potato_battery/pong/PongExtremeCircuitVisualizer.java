@@ -4,9 +4,11 @@ import org.valkyrienskies.horizons.potato_battery.CircuitComponents.GroundNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.ComparatorNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.CounterNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.DeltaNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.EdgePulsingStepperNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.FixedVoltageNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.GainNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.AndNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.BouncingStepperNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.LatchNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.MaxNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.ModCounterNode;
@@ -16,6 +18,7 @@ import org.valkyrienskies.horizons.potato_battery.CircuitComponents.NotNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.OscillatorNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.OrNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.OneShotNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.PaddleCollisionLogicNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.PulseAccumulatingScaleNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.QuantizedSlewNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.RectangleRasterNode;
@@ -65,6 +68,7 @@ public final class PongExtremeCircuitVisualizer {
   private static final class Scene implements Scenario {
     private final VariableVoltageNode leftManual = new VariableVoltageNode(), leftAiEnable = new VariableVoltageNode(), resetTrigger = new VariableVoltageNode(), rc = new VariableVoltageNode();
     private final GroundNode g = new GroundNode();
+    private final FixedVoltageNode fullScale = new FixedVoltageNode(V);
     private final QuantizedSlewNode lp = new QuantizedSlewNode(VY - 1, V), rp = new QuantizedSlewNode(VY - 1, V);
     private final DeltaNode leftAiDx = new DeltaNode(V), leftAiDy = new DeltaNode(V);
     private final FixedVoltageNode leftAiZero = new FixedVoltageNode(0.0), leftAiWallOffset = new FixedVoltageNode(-PM * V);
@@ -92,8 +96,13 @@ public final class PongExtremeCircuitVisualizer {
     private final ComparatorNode rightWin = new ComparatorNode(V * ((WIN - 0.5) / WIN), V, 0.0);
     private final OrNode runSet = new OrNode();
     private final LatchNode run = new LatchNode(V);
-    private final VBallNode vball = new VBallNode();
-    private final HBallNode hball = new HBallNode();
+    private final BouncingStepperNode vball = new BouncingStepperNode(VY, VY0, V, 1);
+    private final EdgePulsingStepperNode hball = new EdgePulsingStepperNode(HX, VX0, V, 1);
+    private final PaddleCollisionLogicNode hballCollision = new PaddleCollisionLogicNode(PH / 2.0, PADDLE_HIT_PADDING, V);
+    private final OrNode hballHold = new OrNode();
+    private final OrNode hballReset = new OrNode();
+    private final OrNode hballDirectionSet = new OrNode();
+    private final MuxNode hballDirectionValue = new MuxNode();
     private final OscillatorNode clk = new OscillatorNode(120.0, 0.5, V);
     private final ModCounterNode hscan = new ModCounterNode(HX, V);
     private final ModCounterNode vscan = new ModCounterNode(VY, V);
@@ -111,62 +120,69 @@ public final class PongExtremeCircuitVisualizer {
     private final AudioSink audio = new AudioSink();
     private volatile double left = 0.5, right = 0.5, speedScale = 1.0;
     private volatile boolean autoLeft, autoRight = true, lu, ld, ru, rd;
-    private volatile boolean resetRequested;
+    private volatile boolean resetRequested = true;
     private double lpy, rpy, bx, by, beamX, beamY, video, ballSpeed, audioLevel;
+    private double serveTimerLevel, holdLevel, resetLevel, directionSetLevel, directionValueLevel, speedLevel, runLevel, collisionHitLevel;
+    private double hscanCount, vscanCount, hdirLevel, vdirLevel;
+    private double solverIterations, solverSubsteps, solverLimitHit, solverFailed;
+    private double solverUnknowns, solverNonZeros, solverZeroRows, solverZeroColumns, solverMissingDiagonals;
     private boolean over;
     private final boolean[][] raster = new boolean[VY][HX];
 
-    @Override public String title() { return "Pong Super Circuit Visualizer"; }
+    @Override public String title() { return "Pong Extreme Circuit Visualizer"; }
     @Override public double timeStep() { return DT; }
 
     @Override public void build(CircuitBuilder b) {
-      b.add(leftManual).add(leftAiEnable).add(resetTrigger).add(rc).add(g).add(lp).add(rp).add(leftAiDx).add(leftAiDy).add(leftAiZero).add(leftAiWallOffset).add(leftAiMovingLeft).add(leftAiXOffset).add(leftAiNegDx).add(leftAiTravel).add(leftAiYAdvance).add(leftAiProjectedY).add(leftAiReflectedY).add(leftAiTargetMux).add(leftMux).add(ready).add(reset).add(scorePulse).add(serveStart).add(serveTimer).add(serveTimerDone).add(serveRelease).add(serveActive).add(serveDirectionSet).add(serveDirection).add(ls).add(rs).add(speed).add(leftWin).add(rightWin).add(runSet).add(run).add(vball).add(hball)
+      b.add(leftManual).add(leftAiEnable).add(resetTrigger).add(rc).add(g).add(fullScale).add(lp).add(rp).add(leftAiDx).add(leftAiDy).add(leftAiZero).add(leftAiWallOffset).add(leftAiMovingLeft).add(leftAiXOffset).add(leftAiNegDx).add(leftAiTravel).add(leftAiYAdvance).add(leftAiProjectedY).add(leftAiReflectedY).add(leftAiTargetMux).add(leftMux).add(ready).add(reset).add(scorePulse).add(serveStart).add(serveTimer).add(serveTimerDone).add(serveRelease).add(serveActive).add(serveDirectionSet).add(serveDirection).add(ls).add(rs).add(speed).add(leftWin).add(rightWin).add(runSet).add(run).add(vball).add(hball).add(hballCollision).add(hballHold).add(hballReset).add(hballDirectionSet).add(hballDirectionValue)
           .add(leftPaddleX).add(rightPaddleX)
           .add(clk).add(hscan).add(vscan).add(lpv).add(rpv).add(bv).add(lsv).add(rsv).add(net).add(mix)
           .add(hitSound).add(bounceSound).add(scoreSound).add(audioMix)
           .connect(leftManual,0,leftMux,0).connect(leftManual,1,g,0).connect(leftAiEnable,0,leftMux,2).connect(leftAiEnable,1,g,0)
           .connect(resetTrigger,0,reset,0).connect(resetTrigger,1,g,0)
           .connect(hball,5,leftAiDx,0).connect(reset,0,leftAiDx,1)
-          .connect(vball,4,leftAiDy,0).connect(reset,0,leftAiDy,1)
+          .connect(vball,5,leftAiDy,0).connect(reset,0,leftAiDy,1)
           .connect(leftAiZero,0,leftAiMovingLeft,0).connect(leftAiDx,2,leftAiMovingLeft,1)
           .connect(hball,5,leftAiXOffset,0).connect(leftAiWallOffset,0,leftAiXOffset,1)
           .connect(leftAiDx,2,leftAiNegDx,0)
           .connect(leftAiXOffset,2,leftAiTravel,0).connect(leftAiNegDx,1,leftAiTravel,1)
           .connect(leftAiDy,2,leftAiYAdvance,0).connect(leftAiTravel,2,leftAiYAdvance,1)
-          .connect(vball,4,leftAiProjectedY,0).connect(leftAiYAdvance,2,leftAiProjectedY,1)
+          .connect(vball,5,leftAiProjectedY,0).connect(leftAiYAdvance,2,leftAiProjectedY,1)
           .connect(leftAiProjectedY,2,leftAiReflectedY,0)
           .connect(lp,1,leftAiTargetMux,0).connect(leftAiReflectedY,1,leftAiTargetMux,1).connect(leftAiMovingLeft,2,leftAiTargetMux,2)
           .connect(leftAiTargetMux,3,leftMux,1).connect(leftMux,3,lp,0)
           .connect(rc,0,rp,0).connect(rc,1,g,0)
           .connect(lp,1,ready,0)
-          .connect(lp,1,vball,0).connect(rp,1,vball,1).connect(lp,1,hball,0).connect(rp,1,hball,1)
-          .connect(vball,4,hball,2).connect(hball,6,vball,2).connect(hball,7,vball,3)
-          .connect(hball,8,scorePulse,0).connect(hball,9,scorePulse,1)
+          .connect(fullScale,0,vball,0).connect(hballCollision,5,vball,2).connect(hballCollision,6,vball,3).connect(reset,0,vball,4)
+          .connect(lp,1,hballCollision,0).connect(rp,1,hballCollision,1).connect(vball,5,hballCollision,2).connect(hball,6,hballCollision,3).connect(hball,7,hballCollision,4)
+          .connect(hballCollision,9,scorePulse,0).connect(hballCollision,10,scorePulse,1)
           .connect(scorePulse,2,serveStart,0).connect(reset,0,serveStart,1)
           .connect(serveStart,2,serveTimer,0).connect(g,0,serveTimer,1)
           .connect(serveTimer,2,serveTimerDone,0)
           .connect(ready,1,serveRelease,0).connect(serveTimerDone,1,serveRelease,1)
           .connect(serveStart,2,serveActive,0).connect(serveRelease,2,serveActive,1)
-          .connect(hball,9,serveDirectionSet,0).connect(reset,0,serveDirectionSet,1)
-          .connect(serveDirectionSet,2,serveDirection,0).connect(hball,8,serveDirection,1)
-          .connect(hball,8,ls,0).connect(reset,0,ls,1).connect(hball,9,rs,0).connect(reset,0,rs,1)
-          .connect(hball,6,speed,0).connect(serveActive,2,speed,1).connect(speed,2,hball,10)
+          .connect(hballCollision,10,serveDirectionSet,0).connect(reset,0,serveDirectionSet,1)
+          .connect(serveDirectionSet,2,serveDirection,0).connect(hballCollision,9,serveDirection,1)
+          .connect(hballCollision,9,ls,0).connect(reset,0,ls,1).connect(hballCollision,10,rs,0).connect(reset,0,rs,1)
+          .connect(hballCollision,5,speed,0).connect(serveTimer,2,speed,1)
           .connect(ls,2,leftWin,0).connect(g,0,leftWin,1).connect(rs,2,rightWin,0).connect(g,0,rightWin,1)
           .connect(leftWin,2,runSet,0).connect(rightWin,2,runSet,1).connect(runSet,2,run,0).connect(reset,0,run,1)
-          .connect(run,2,hball,11).connect(run,2,vball,5)
-          .connect(serveActive,2,hball,3).connect(serveDirection,2,hball,4).connect(reset,0,hball,12).connect(reset,0,vball,7)
+          .connect(run,2,hballHold,0).connect(serveTimer,2,hballHold,1)
+          .connect(reset,0,hballReset,0).connect(hballCollision,11,hballReset,1)
+          .connect(serveTimer,2,hballDirectionSet,0).connect(hballCollision,7,hballDirectionSet,1)
+          .connect(hballCollision,8,hballDirectionValue,0).connect(serveDirection,2,hballDirectionValue,1).connect(serveTimer,2,hballDirectionValue,2)
+          .connect(speed,2,hball,0).connect(hballHold,2,hball,1).connect(hballDirectionSet,2,hball,2).connect(hballDirectionValue,3,hball,3).connect(hballReset,2,hball,4)
           .connect(clk,0,hscan,0).connect(reset,0,hscan,1).connect(hscan,3,vscan,0).connect(reset,0,vscan,1)
           .connect(hscan,2,lpv,0).connect(vscan,2,lpv,1).connect(leftPaddleX,0,lpv,2).connect(lp,1,lpv,3)
           .connect(hscan,2,rpv,0).connect(vscan,2,rpv,1).connect(rightPaddleX,0,rpv,2).connect(rp,1,rpv,3)
-          .connect(hscan,2,bv,0).connect(vscan,2,bv,1).connect(hball,5,bv,2).connect(vball,4,bv,3)
+          .connect(hscan,2,bv,0).connect(vscan,2,bv,1).connect(hball,5,bv,2).connect(vball,5,bv,3)
           .connect(hscan,2,lsv,0).connect(vscan,2,lsv,1).connect(ls,2,lsv,2)
           .connect(hscan,2,rsv,0).connect(vscan,2,rsv,1).connect(rs,2,rsv,2)
           .connect(hscan,2,net,0).connect(vscan,2,net,1)
           .connect(lpv,4,mix,0).connect(rpv,4,mix,1).connect(bv,4,mix,2).connect(lsv,3,mix,3).connect(rsv,3,mix,4).connect(net,2,mix,5)
-          .connect(serveActive,2,bounceInhibit,0).connect(run,2,bounceInhibit,1);
-      b.connect(hball,6,hitSound,0).connect(g,0,hitSound,1).connect(run,2,hitSound,2)
+          .connect(serveTimer,2,bounceInhibit,0).connect(run,2,bounceInhibit,1).connect(bounceInhibit,2,vball,1);
+      b.connect(hballCollision,5,hitSound,0).connect(g,0,hitSound,1).connect(run,2,hitSound,2)
           .connect(vball,6,bounceSound,0).connect(g,0,bounceSound,1).connect(bounceInhibit,2,bounceSound,2)
-          .connect(hball,8,scoreSound,0).connect(hball,9,scoreSound,1).connect(run,2,scoreSound,2)
+          .connect(hballCollision,9,scoreSound,0).connect(hballCollision,10,scoreSound,1).connect(run,2,scoreSound,2)
           .connect(hitSound,3,audioMix,0).connect(bounceSound,3,audioMix,1).connect(scoreSound,3,audioMix,2);
     }
 
@@ -184,10 +200,31 @@ public final class PongExtremeCircuitVisualizer {
     }
 
     @Override public void afterStep(double time, PowerNetworkServer network) {
-      lpy = network.getVoltageAt(lp, 1) / V; rpy = network.getVoltageAt(rp, 1) / V; bx = hball.pos(); by = vball.pos();
+      lpy = network.getVoltageAt(lp, 1) / V; rpy = network.getVoltageAt(rp, 1) / V; bx = network.getVoltageAt(hball, 5) / V; by = network.getVoltageAt(vball, 5) / V;
       beamX = hscan.getCount() / (double) (HX - 1); beamY = vscan.getCount() / (double) (VY - 1); video = network.getVoltageAt(mix, 6); over = network.getVoltageAt(run, 2) > V * 0.5;
-      ballSpeed = Math.hypot(hball.vel(), vball.vel()) * speed.scale();
+      ballSpeed = Math.hypot(network.getVoltageAt(hball, 8) > V * 0.5 ? VX0 : -VX0, network.getVoltageAt(vball, 7) > V * 0.5 ? VY0 : -VY0) * speed.scale();
       audioLevel = network.getVoltageAt(audioMix, 3);
+      serveTimerLevel = network.getVoltageAt(serveTimer, 2);
+      holdLevel = network.getVoltageAt(hballHold, 2);
+      resetLevel = network.getVoltageAt(hballReset, 2);
+      directionSetLevel = network.getVoltageAt(hballDirectionSet, 2);
+      directionValueLevel = network.getVoltageAt(hballDirectionValue, 3);
+      speedLevel = network.getVoltageAt(speed, 2);
+      runLevel = network.getVoltageAt(run, 2);
+      collisionHitLevel = network.getVoltageAt(hballCollision, 5);
+      hscanCount = hscan.getCount();
+      vscanCount = vscan.getCount();
+      hdirLevel = network.getVoltageAt(hball, 8);
+      vdirLevel = network.getVoltageAt(vball, 7);
+      solverIterations = network.getLastNonlinearIterations();
+      solverSubsteps = network.getLastRequestedSubsteps();
+      solverLimitHit = network.wasLastIterationLimitHit() ? 1.0 : 0.0;
+      solverFailed = network.didLastSolveFail() ? 1.0 : 0.0;
+      solverUnknowns = network.getLastUnknownCount();
+      solverNonZeros = network.getLastNonZeroCount();
+      solverZeroRows = network.getLastZeroRowCount();
+      solverZeroColumns = network.getLastZeroColumnCount();
+      solverMissingDiagonals = network.getLastMissingDiagonalCount();
       updateRaster();
       audio.push(audioLevel);
     }
@@ -208,7 +245,18 @@ public final class PongExtremeCircuitVisualizer {
           new Readout("Beam X: %.3f",()->beamX), new Readout("Beam Y: %.3f",()->beamY),
           new Readout("Video: %.2f V",()->video), new Readout("Speed: %.3f",()->ballSpeed),
           new Readout("Audio: %.2f V",()->audioLevel), new Readout("Attract: %.1f",()->runOutput()),
-          new Readout("Left Score: %.0f",()->ls.getCount()*1.0), new Readout("Right Score: %.0f",()->rs.getCount()*1.0)
+          new Readout("Left Score: %.0f",()->ls.getCount()*1.0), new Readout("Right Score: %.0f",()->rs.getCount()*1.0),
+          new Readout("Serve Timer: %.2f V",()->serveTimerLevel), new Readout("Hold: %.2f V",()->holdLevel),
+          new Readout("Reset: %.2f V",()->resetLevel), new Readout("Dir Set: %.2f V",()->directionSetLevel),
+          new Readout("Dir Value: %.2f V",()->directionValueLevel), new Readout("Speed V: %.2f V",()->speedLevel),
+          new Readout("Run Latch: %.2f V",()->runLevel), new Readout("Hit Pulse: %.2f V",()->collisionHitLevel),
+          new Readout("HScan: %.0f",()->hscanCount), new Readout("VScan: %.0f",()->vscanCount),
+          new Readout("HDir: %.2f V",()->hdirLevel), new Readout("VDir: %.2f V",()->vdirLevel),
+          new Readout("Solve Iters: %.0f",()->solverIterations), new Readout("Substeps: %.0f",()->solverSubsteps),
+          new Readout("Limit Hit: %.0f",()->solverLimitHit), new Readout("Solve Fail: %.0f",()->solverFailed),
+          new Readout("Unknowns: %.0f",()->solverUnknowns), new Readout("NonZeros: %.0f",()->solverNonZeros),
+          new Readout("Zero Rows: %.0f",()->solverZeroRows), new Readout("Zero Cols: %.0f",()->solverZeroColumns),
+          new Readout("Missing Diag: %.0f",()->solverMissingDiagonals)
       );
     }
 
@@ -319,60 +367,6 @@ public final class PongExtremeCircuitVisualizer {
     }
   }
 
-  private static final class VBallNode extends PowerNode {
-    private int cell = (VY - 1) / 2, dir = 1; private double stepAccum; private boolean bounce; private VBallNode() { super(8); }
-    @Override public int getVoltageSourceCount() { return 2; }
-    @Override public PowerNodeSimulationMode getSimulationMode() { return PowerNodeSimulationMode.DYNAMIC_NONLINEAR; }
-    @Override public double getSuggestedMaxTimeStepSeconds() { return 1.0 / 3000.0; }
-    @Override public void stamp(CircuitStampContext c) { c.stampVoltageSource(0,4,CircuitStampContext.GROUND,pos() * V); c.stampVoltageSource(1,6,CircuitStampContext.GROUND,bounce ? V : 0); }
-    @Override public void onSubstepComplete(IPowerNetwork<?> n, double dt) {
-      if (n.getVoltageAt(this,7) > 2.5) { reset(); return; }
-      bounce = false;
-      if (n.getVoltageAt(this,5) > 2.5) return;
-      if (n.getVoltageAt(this,2) > 2.5) {
-        double d = (n.getVoltageAt(this,3) / V) * 2.0 - 1.0;
-        dir = d >= 0.0 ? 1 : -1;
-      }
-      stepAccum += Math.abs(VY0) * (VY - 1) * dt;
-      while (stepAccum >= 1.0) {
-        stepAccum -= 1.0;
-        cell += dir;
-        if (cell <= 0) { cell = 0; dir = 1; bounce = true; }
-        else if (cell >= VY - 1) { cell = VY - 1; dir = -1; bounce = true; }
-      }
-    }
-    void reset() { cell = (VY - 1) / 2; dir = 1; stepAccum = 0.0; bounce = false; } double pos() { return cell / (double)(VY - 1); } double vel() { return dir * VY0; }
-  }
-  private static final class HBallNode extends PowerNode {
-    private int cell = (HX - 1) / 2, dir = 1; private double def = 0.5, stepAccum; private boolean hit, lp, rp; private HBallNode() { super(13); }
-    @Override public int getVoltageSourceCount() { return 5; }
-    @Override public PowerNodeSimulationMode getSimulationMode() { return PowerNodeSimulationMode.DYNAMIC_NONLINEAR; }
-    @Override public double getSuggestedMaxTimeStepSeconds() { return 1.0 / 3000.0; }
-    @Override public void stamp(CircuitStampContext c) { c.stampVoltageSource(0,5,CircuitStampContext.GROUND,pos() * V); c.stampVoltageSource(1,6,CircuitStampContext.GROUND,hit ? V : 0); c.stampVoltageSource(2,7,CircuitStampContext.GROUND,def * V); c.stampVoltageSource(3,8,CircuitStampContext.GROUND,lp ? V : 0); c.stampVoltageSource(4,9,CircuitStampContext.GROUND,rp ? V : 0); }
-    @Override public void onSubstepComplete(IPowerNetwork<?> n, double dt) {
-      if (n.getVoltageAt(this,12) > 2.5) { reset(); return; }
-      hit = false; lp = false; rp = false;
-      if (n.getVoltageAt(this,11) > 2.5) return;
-      if (n.getVoltageAt(this,3) > 2.5) { dir = n.getVoltageAt(this,4) > 2.5 ? 1 : -1; cell = (HX - 1) / 2; stepAccum = 0.0; return; }
-      double s = Math.max(0.25, n.getVoltageAt(this,10) / V), l = c01(n.getVoltageAt(this,0) / V), r = c01(n.getVoltageAt(this,1) / V), y = c01(n.getVoltageAt(this,2) / V);
-      int leftCell = Math.max(0, (int)Math.round(PM * (HX - 1))) + BALL_RADIUS_CELLS_X;
-      int rightCell = Math.min(HX - 1, (int)Math.round((1.0 - PM) * (HX - 1))) - BALL_RADIUS_CELLS_X;
-      stepAccum += Math.abs(VX0) * s * (HX - 1) * dt;
-      while (stepAccum >= 1.0) {
-        stepAccum -= 1.0;
-        cell += dir;
-        if (cell <= leftCell) {
-          if (hit(y, l)) { cell = leftCell; dir = 1; def = c01(0.5 + (y - l) / PH); hit = true; }
-          else { rp = true; cell = (HX - 1) / 2; stepAccum = 0.0; break; }
-        } else if (cell >= rightCell) {
-          if (hit(y, r)) { cell = rightCell; dir = -1; def = c01(0.5 + (y - r) / PH); hit = true; }
-          else { lp = true; cell = (HX - 1) / 2; stepAccum = 0.0; break; }
-        }
-      }
-    }
-    private boolean hit(double by, double py) { double t = py - (PH / 2.0 + PADDLE_HIT_PADDING), b = py + (PH / 2.0 + PADDLE_HIT_PADDING); return by >= t && by <= b; }
-    void reset() { cell = (HX - 1) / 2; dir = 1; def = 0.5; hit = false; lp = false; rp = false; stepAccum = 0.0; } double pos() { return cell / (double)(HX - 1); } double vel() { return dir * VX0; }
-  }
   private static final class AudioSink {
     private final SourceDataLine line;
     private final byte[] frame;

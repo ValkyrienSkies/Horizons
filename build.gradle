@@ -237,7 +237,7 @@ tasks.register("runPongCircuitVisualizer", JavaExec) {
     description = "Launch the manual Pong circuit visualizer"
     dependsOn testClasses
     classpath = sourceSets.test.runtimeClasspath
-    mainClass = "org.valkyrienskies.horizons.potato_battery.PongCircuitVisualizer"
+    mainClass = "org.valkyrienskies.horizons.potato_battery.pong.PongCircuitVisualizer"
 
     def solverName = (project.findProperty("powerSolver") ?: "jklu").toString()
     systemProperty "power.solver", solverName
@@ -248,7 +248,7 @@ tasks.register("runPongRasterCircuitVisualizer", JavaExec) {
     description = "Launch the manual raster-authentic Pong circuit visualizer"
     dependsOn testClasses
     classpath = sourceSets.test.runtimeClasspath
-    mainClass = "org.valkyrienskies.horizons.potato_battery.PongRasterCircuitVisualizer"
+    mainClass = "org.valkyrienskies.horizons.potato_battery.pong.PongRasterCircuitVisualizer"
 
     def solverName = (project.findProperty("powerSolver") ?: "jklu").toString()
     systemProperty "power.solver", solverName
@@ -259,10 +259,21 @@ tasks.register("runPongSuperCircuitVisualizer", JavaExec) {
     description = "Launch the manual super-authentic Pong circuit visualizer"
     dependsOn testClasses
     classpath = sourceSets.test.runtimeClasspath
-    mainClass = "org.valkyrienskies.horizons.potato_battery.PongSuperCircuitVisualizer"
+    mainClass = "org.valkyrienskies.horizons.potato_battery.pong.PongSuperCircuitVisualizer"
 
     def solverName = (project.findProperty("powerSolver") ?: "jklu").toString()
     systemProperty "power.solver", solverName
+}
+
+tasks.register("runPongExtremeCircuitVisualizer", JavaExec) {
+  group = "verification"
+  description = "Launch the manual overly authentic Pong circuit visualizer"
+  dependsOn testClasses
+  classpath = sourceSets.test.runtimeClasspath
+  mainClass = "org.valkyrienskies.horizons.potato_battery.pong.PongExtremeCircuitVisualizer"
+
+  def solverName = (project.findProperty("powerSolver") ?: "jklu").toString()
+  systemProperty "power.solver", solverName
 }
 
 tasks.register("runAstableSpikeDiagnostics", JavaExec) {

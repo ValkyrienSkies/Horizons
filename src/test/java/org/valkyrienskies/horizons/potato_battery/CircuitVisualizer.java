@@ -14,6 +14,8 @@ import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.awt.BorderLayout;
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -29,6 +31,12 @@ import java.util.Deque;
 import java.util.List;
 import java.util.function.DoubleSupplier;
 import java.util.concurrent.locks.LockSupport;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 public final class CircuitVisualizer {
   private static final int TIMER_MS = 16;
@@ -67,6 +75,12 @@ public final class CircuitVisualizer {
       frame.toFront();
       frame.requestFocus();
       SwingUtilities.invokeLater(() -> frame.setAlwaysOnTop(false));
+      frame.addWindowListener(new WindowAdapter() {
+        @Override
+        public void windowClosed(WindowEvent e) {
+          model.dumpStateToFile();
+        }
+      });
       model.start(frame);
     });
   }
@@ -164,6 +178,7 @@ public final class CircuitVisualizer {
     private int framesThisWindow;
     private volatile double ticksPerSecond;
     private volatile double framesPerSecond;
+    private volatile Throwable simulationFailure;
 
     VisualizerModel(Scenario scenario, IPBSolver solver, String solverName) {
       this.scenario = scenario;
@@ -216,7 +231,14 @@ public final class CircuitVisualizer {
 
         int executed = 0;
         while (executed < maxStepsPerBurst && accumulatedNanos >= stepNanos) {
-          step();
+          try {
+            step();
+          } catch (Throwable throwable) {
+            simulationFailure = throwable;
+            throwable.printStackTrace();
+            running = false;
+            return;
+          }
           accumulatedNanos -= stepNanos;
           executed++;
         }
@@ -265,6 +287,40 @@ public final class CircuitVisualizer {
 
     double framesPerSecond() {
       return framesPerSecond;
+    }
+
+    void dumpStateToFile() {
+      synchronized (stateLock) {
+        try {
+          Path reportsDir = Paths.get("build", "reports", "visualizers");
+          Files.createDirectories(reportsDir);
+          String safeTitle = scenario.title().replaceAll("[^A-Za-z0-9._-]+", "-");
+          String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+          Path out = reportsDir.resolve(safeTitle + "-" + solverName.toLowerCase() + "-" + timestamp + ".txt");
+          List<String> lines = new ArrayList<>();
+          lines.add("title=" + scenario.title());
+          lines.add("solver=" + solverName);
+          lines.add(String.format("dt=%.9f", scenario.timeStep()));
+          lines.add(String.format("tps=%.6f", ticksPerSecond()));
+          lines.add(String.format("fps=%.6f", framesPerSecond()));
+          lines.add(String.format("ideal_tps=%.6f", idealTicksPerSecond()));
+          lines.add(String.format("slowdown=%.6f", slowdownFactor()));
+          if (simulationFailure != null) {
+            lines.add("simulation_failure=" + simulationFailure);
+            for (StackTraceElement element : simulationFailure.getStackTrace()) {
+              lines.add("at=" + element);
+            }
+          }
+          for (Readout readout : readouts) {
+            String label = readout.format().replace("%", "pct").replaceAll("[^A-Za-z0-9._-]+", "_");
+            lines.add(label + "=" + String.format("%.9f", readout.value().getAsDouble()));
+          }
+          Files.write(out, lines, StandardCharsets.UTF_8);
+          System.out.println("Circuit visualizer dump written to " + out.toAbsolutePath());
+        } catch (Exception ex) {
+          System.err.println("Failed to write circuit visualizer dump: " + ex.getMessage());
+        }
+      }
     }
 
     Object stateLock() {
