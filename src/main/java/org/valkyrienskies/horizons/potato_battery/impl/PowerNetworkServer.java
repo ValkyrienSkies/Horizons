@@ -58,11 +58,6 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
   private int lastNonlinearIterations;
   private boolean lastIterationLimitHit;
   private boolean lastSolveFailed;
-  private int lastUnknownCount;
-  private int lastNonZeroCount;
-  private int lastZeroRowCount;
-  private int lastZeroColumnCount;
-  private int lastMissingDiagonalCount;
   private int settleConfirmationSolvesRemaining = 1;
 
   public PowerNetworkServer(@Nullable ServerLevel level, @Nullable PhysLevel physLevel) {
@@ -169,11 +164,6 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
     lastNonlinearIterations = solveFeedback.nonlinearIterations();
     lastIterationLimitHit = solveFeedback.iterationLimitHit();
     lastSolveFailed = solveFeedback.solveFailed();
-    lastUnknownCount = solveFeedback.unknownCount();
-    lastNonZeroCount = solveFeedback.nonZeroCount();
-    lastZeroRowCount = solveFeedback.zeroRowCount();
-    lastZeroColumnCount = solveFeedback.zeroColumnCount();
-    lastMissingDiagonalCount = solveFeedback.missingDiagonalCount();
 
     boolean settledLinear = lastSolveMaxVoltageDelta <= SLEEP_VOLTAGE_DELTA
         && lastSolveMaxCurrentDelta <= SLEEP_CURRENT_DELTA;
@@ -308,7 +298,7 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
 
   private SolverPhaseDiagnostics.SolveFeedback stepWithoutFeedback(int subSteps) {
     this.solver.step(this, subSteps);
-    return new SolverPhaseDiagnostics.SolveFeedback(0, Math.max(subSteps, 1), false, false, 0, 0, 0, 0, 0);
+    return new SolverPhaseDiagnostics.SolveFeedback(0, Math.max(subSteps, 1), false, false);
   }
 
   private void updateAdaptiveNonlinearSubsteps(
@@ -413,26 +403,6 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
 
   public boolean didLastSolveFail() {
     return lastSolveFailed;
-  }
-
-  public int getLastUnknownCount() {
-    return lastUnknownCount;
-  }
-
-  public int getLastNonZeroCount() {
-    return lastNonZeroCount;
-  }
-
-  public int getLastZeroRowCount() {
-    return lastZeroRowCount;
-  }
-
-  public int getLastZeroColumnCount() {
-    return lastZeroColumnCount;
-  }
-
-  public int getLastMissingDiagonalCount() {
-    return lastMissingDiagonalCount;
   }
 
   public int getAdaptiveDynamicNonlinearSubsteps() {

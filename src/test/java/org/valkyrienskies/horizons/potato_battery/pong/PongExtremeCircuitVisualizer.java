@@ -126,7 +126,6 @@ public final class PongExtremeCircuitVisualizer {
     private double serveTimerLevel, holdLevel, resetLevel, directionSetLevel, directionValueLevel, speedLevel, runLevel, collisionHitLevel;
     private double hscanCount, vscanCount, hdirLevel, vdirLevel;
     private double solverIterations, solverSubsteps, solverLimitHit, solverFailed;
-    private double solverUnknowns, solverNonZeros, solverZeroRows, solverZeroColumns, solverMissingDiagonals;
     private boolean over;
     private final boolean[][] raster = new boolean[VY][HX];
 
@@ -221,11 +220,6 @@ public final class PongExtremeCircuitVisualizer {
       solverSubsteps = network.getLastRequestedSubsteps();
       solverLimitHit = network.wasLastIterationLimitHit() ? 1.0 : 0.0;
       solverFailed = network.didLastSolveFail() ? 1.0 : 0.0;
-      solverUnknowns = network.getLastUnknownCount();
-      solverNonZeros = network.getLastNonZeroCount();
-      solverZeroRows = network.getLastZeroRowCount();
-      solverZeroColumns = network.getLastZeroColumnCount();
-      solverMissingDiagonals = network.getLastMissingDiagonalCount();
       updateRaster();
       audio.push(audioLevel);
     }
@@ -254,10 +248,7 @@ public final class PongExtremeCircuitVisualizer {
           new Readout("HScan: %.0f",()->hscanCount), new Readout("VScan: %.0f",()->vscanCount),
           new Readout("HDir: %.2f V",()->hdirLevel), new Readout("VDir: %.2f V",()->vdirLevel),
           new Readout("Solve Iters: %.0f",()->solverIterations), new Readout("Substeps: %.0f",()->solverSubsteps),
-          new Readout("Limit Hit: %.0f",()->solverLimitHit), new Readout("Solve Fail: %.0f",()->solverFailed),
-          new Readout("Unknowns: %.0f",()->solverUnknowns), new Readout("NonZeros: %.0f",()->solverNonZeros),
-          new Readout("Zero Rows: %.0f",()->solverZeroRows), new Readout("Zero Cols: %.0f",()->solverZeroColumns),
-          new Readout("Missing Diag: %.0f",()->solverMissingDiagonals)
+          new Readout("Limit Hit: %.0f",()->solverLimitHit), new Readout("Solve Fail: %.0f",()->solverFailed)
       );
     }
 
@@ -267,7 +258,6 @@ public final class PongExtremeCircuitVisualizer {
       gg.setColor(new Color(222,228,236)); gg.setStroke(new BasicStroke(2.5f)); gg.drawRoundRect(f.x,f.y,f.width,f.height,24,24);
       drawRaster(gg, f);
       gg.setFont(new Font(Font.MONOSPACED,Font.PLAIN,14));
-      gg.drawString("Authentic copy: reset pulse, paddle-ready serve gate, stop/attract logic, clock, scan counters, and raster video gates.", f.x, f.y + f.height + 24);
     }
 
     @Override public void populateControls(JPanel controls) {

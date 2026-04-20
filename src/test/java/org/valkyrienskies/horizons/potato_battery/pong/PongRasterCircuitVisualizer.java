@@ -135,7 +135,6 @@ public final class PongRasterCircuitVisualizer {
       gg.drawString(Integer.toString(ls.score()), f.x + f.width / 2 - 80, f.y + 38);
       gg.drawString(Integer.toString(rs.score()), f.x + f.width / 2 + 50, f.y + 38);
       gg.setFont(new Font(Font.MONOSPACED,Font.PLAIN,14));
-      gg.drawString("Authentic copy: gameplay graph plus master clock, scan counters, and raster video gates.", f.x, f.y + f.height + 24);
       if (over) { gg.setFont(new Font(Font.MONOSPACED,Font.BOLD,22)); gg.drawString(ls.score() > rs.score() ? "LEFT PLAYER WINS" : "RIGHT PLAYER WINS", f.x + f.width / 2 - 120, f.y + f.height / 2); }
     }
 

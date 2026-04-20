@@ -156,14 +156,6 @@ abstract class AbstractStampingSolver implements IPBSolver {
         nodeTopology.node.stamp(new StampContextImpl(nodeTopology, matrix, rhs, timeStep, guess));
       }
       applyPortGmin(matrix, topology);
-      if (accumulator != null) {
-        MatrixStructureDiagnostics diagnostics = analyzeMatrixStructure(matrix);
-        accumulator.unknownCount = diagnostics.unknownCount;
-        accumulator.nonZeroCount = diagnostics.nonZeroCount;
-        accumulator.zeroRowCount = diagnostics.zeroRowCount;
-        accumulator.zeroColumnCount = diagnostics.zeroColumnCount;
-        accumulator.missingDiagonalCount = diagnostics.missingDiagonalCount;
-      }
       topology.captureMatrixPattern(matrix);
       if (accumulator instanceof StepPhaseAccumulator phaseAccumulator) {
         phaseAccumulator.stampNanos += System.nanoTime() - stampStart;
@@ -215,32 +207,17 @@ abstract class AbstractStampingSolver implements IPBSolver {
     private final int substeps;
     private final boolean iterationLimitHit;
     private final boolean solveFailed;
-    private final int unknownCount;
-    private final int nonZeroCount;
-    private final int zeroRowCount;
-    private final int zeroColumnCount;
-    private final int missingDiagonalCount;
 
     private StepSolveFeedback(
         int nonlinearIterations,
         int substeps,
         boolean iterationLimitHit,
-        boolean solveFailed,
-        int unknownCount,
-        int nonZeroCount,
-        int zeroRowCount,
-        int zeroColumnCount,
-        int missingDiagonalCount
+        boolean solveFailed
     ) {
       this.nonlinearIterations = nonlinearIterations;
       this.substeps = substeps;
       this.iterationLimitHit = iterationLimitHit;
       this.solveFailed = solveFailed;
-      this.unknownCount = unknownCount;
-      this.nonZeroCount = nonZeroCount;
-      this.zeroRowCount = zeroRowCount;
-      this.zeroColumnCount = zeroColumnCount;
-      this.missingDiagonalCount = missingDiagonalCount;
     }
 
     public int nonlinearIterations() {
@@ -257,26 +234,6 @@ abstract class AbstractStampingSolver implements IPBSolver {
 
     public boolean solveFailed() {
       return solveFailed;
-    }
-
-    public int unknownCount() {
-      return unknownCount;
-    }
-
-    public int nonZeroCount() {
-      return nonZeroCount;
-    }
-
-    public int zeroRowCount() {
-      return zeroRowCount;
-    }
-
-    public int zeroColumnCount() {
-      return zeroColumnCount;
-    }
-
-    public int missingDiagonalCount() {
-      return missingDiagonalCount;
     }
   }
 
@@ -387,42 +344,11 @@ abstract class AbstractStampingSolver implements IPBSolver {
     protected int substeps;
     protected boolean iterationLimitHit;
     protected boolean solveFailed;
-    protected int unknownCount;
-    protected int nonZeroCount;
-    protected int zeroRowCount;
-    protected int zeroColumnCount;
-    protected int missingDiagonalCount;
   }
 
   private static final class StepFeedbackAccumulator extends StepAccumulator {
     private StepSolveFeedback finish() {
-      return new StepSolveFeedback(
-          nonlinearIterations,
-          substeps,
-          iterationLimitHit,
-          solveFailed,
-          unknownCount,
-          nonZeroCount,
-          zeroRowCount,
-          zeroColumnCount,
-          missingDiagonalCount
-      );
-    }
-  }
-
-  private static final class MatrixStructureDiagnostics {
-    private final int unknownCount;
-    private final int nonZeroCount;
-    private final int zeroRowCount;
-    private final int zeroColumnCount;
-    private final int missingDiagonalCount;
-
-    private MatrixStructureDiagnostics(int unknownCount, int nonZeroCount, int zeroRowCount, int zeroColumnCount, int missingDiagonalCount) {
-      this.unknownCount = unknownCount;
-      this.nonZeroCount = nonZeroCount;
-      this.zeroRowCount = zeroRowCount;
-      this.zeroColumnCount = zeroColumnCount;
-      this.missingDiagonalCount = missingDiagonalCount;
+      return new StepSolveFeedback(nonlinearIterations, substeps, iterationLimitHit, solveFailed);
     }
   }
 
@@ -716,44 +642,6 @@ abstract class AbstractStampingSolver implements IPBSolver {
         }
       }
     }
-  }
-
-  private static MatrixStructureDiagnostics analyzeMatrixStructure(MatrixAccumulator matrix) {
-    CscMatrix csc = matrix.toCscMatrix();
-    int dimension = csc.dimension();
-    int[] rowCounts = new int[dimension];
-    int[] columnCounts = new int[dimension];
-    boolean[] diagonalPresent = new boolean[dimension];
-
-    for (int column = 0; column < dimension; column++) {
-      int start = csc.columnPointers()[column];
-      int end = csc.columnPointers()[column + 1];
-      columnCounts[column] = end - start;
-      for (int index = start; index < end; index++) {
-        int row = csc.rowIndices()[index];
-        rowCounts[row]++;
-        if (row == column) {
-          diagonalPresent[column] = true;
-        }
-      }
-    }
-
-    int zeroRows = 0;
-    int zeroColumns = 0;
-    int missingDiagonals = 0;
-    for (int i = 0; i < dimension; i++) {
-      if (rowCounts[i] == 0) {
-        zeroRows++;
-      }
-      if (columnCounts[i] == 0) {
-        zeroColumns++;
-      }
-      if (!diagonalPresent[i]) {
-        missingDiagonals++;
-      }
-    }
-
-    return new MatrixStructureDiagnostics(dimension, csc.values().length, zeroRows, zeroColumns, missingDiagonals);
   }
 
   protected record CscMatrix(int dimension, int[] columnPointers, int[] rowIndices, double[] values) {}

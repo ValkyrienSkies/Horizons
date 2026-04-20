@@ -149,7 +149,6 @@ public final class PongSuperCircuitVisualizer {
       gg.setColor(new Color(222,228,236)); gg.setStroke(new BasicStroke(2.5f)); gg.drawRoundRect(f.x,f.y,f.width,f.height,24,24);
       drawRaster(gg, f);
       gg.setFont(new Font(Font.MONOSPACED,Font.PLAIN,14));
-      gg.drawString("Authentic copy: reset pulse, paddle-ready serve gate, stop/attract logic, clock, scan counters, and raster video gates.", f.x, f.y + f.height + 24);
     }
 
     @Override public void populateControls(JPanel controls) {

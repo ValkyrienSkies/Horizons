@@ -196,8 +196,6 @@ public final class PongCircuitVisualizer {
       g.drawString(Integer.toString(rightScore.score()), field.x + field.width / 2 + 50, field.y + 38);
 
       g.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 14));
-      g.drawString("More circuit-authentic decomposition: paddle registers, serve timer, score counters, and split horizontal/vertical ball control.",
-          field.x, field.y + field.height + 22);
 
       if (gameOver) {
         g.setFont(new Font(Font.MONOSPACED, Font.BOLD, 22));

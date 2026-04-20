@@ -276,6 +276,39 @@ tasks.register("runPongExtremeCircuitVisualizer", JavaExec) {
   systemProperty "power.solver", solverName
 }
 
+tasks.register("runLogicFabricStressVisualizer", JavaExec) {
+  group = "verification"
+  description = "Launch the logic-fabric stress visualizer"
+  dependsOn testClasses
+  classpath = sourceSets.test.runtimeClasspath
+  mainClass = "org.valkyrienskies.horizons.potato_battery.stress_tests.LogicFabricStressVisualizer"
+
+  def solverName = (project.findProperty("powerSolver") ?: "jklu").toString()
+  systemProperty "power.solver", solverName
+}
+
+tasks.register("runSemiconductorSwitchMatrixStressVisualizer", JavaExec) {
+  group = "verification"
+  description = "Launch the semiconductor switch-matrix stress visualizer"
+  dependsOn testClasses
+  classpath = sourceSets.test.runtimeClasspath
+  mainClass = "org.valkyrienskies.horizons.potato_battery.stress_tests.SemiconductorSwitchMatrixStressVisualizer"
+
+  def solverName = (project.findProperty("powerSolver") ?: "jklu").toString()
+  systemProperty "power.solver", solverName
+}
+
+tasks.register("runReactiveCoupledLatticeStressVisualizer", JavaExec) {
+  group = "verification"
+  description = "Launch the reactive coupled-lattice stress visualizer"
+  dependsOn testClasses
+  classpath = sourceSets.test.runtimeClasspath
+  mainClass = "org.valkyrienskies.horizons.potato_battery.stress_tests.ReactiveCoupledLatticeStressVisualizer"
+
+  def solverName = (project.findProperty("powerSolver") ?: "jklu").toString()
+  systemProperty "power.solver", solverName
+}
+
 tasks.register("runAstableSpikeDiagnostics", JavaExec) {
     group = "verification"
     description = "Run a long astable multivibrator soak and write CSV diagnostics"
