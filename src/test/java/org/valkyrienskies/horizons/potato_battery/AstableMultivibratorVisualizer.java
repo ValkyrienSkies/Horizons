@@ -2,6 +2,7 @@ package org.valkyrienskies.horizons.potato_battery;
 
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.BatteryNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.CapacitorNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.DiodeNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.GroundNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.NPNTransistorNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.ResistorNode;
@@ -18,6 +19,9 @@ import java.util.List;
 
 public final class AstableMultivibratorVisualizer {
   public static void main(String[] args) {
+    if (System.getProperty("power.solver") == null) {
+      System.setProperty("power.solver", "ejml");
+    }
     CircuitVisualizer.launch(new AstableScenario());
   }
 
@@ -34,6 +38,10 @@ public final class AstableMultivibratorVisualizer {
     private final CapacitorNode c2 = new CapacitorNode(4.7e-6);
     private final NPNTransistorNode q1 = new NPNTransistorNode();
     private final NPNTransistorNode q2 = new NPNTransistorNode();
+    private final DiodeNode q1BaseEmitterReverseClamp = new DiodeNode();
+    private final DiodeNode q2BaseEmitterReverseClamp = new DiodeNode();
+    private final DiodeNode q1BaseCollectorForwardClamp = new DiodeNode();
+    private final DiodeNode q2BaseCollectorForwardClamp = new DiodeNode();
     private final GroundNode ground = new GroundNode();
 
     private double vc1;
@@ -54,28 +62,34 @@ public final class AstableMultivibratorVisualizer {
     @Override
     public void build(CircuitBuilder b) {
       b.add(battery).add(rc1).add(rc2).add(rb1).add(rb2)
-          .add(c1).add(c2).add(q1).add(q2).add(ground)
-          // Vcc rail: battery.0 — Rc1.0 — Rc2.0 — Rb1.0 — Rb2.0
+          .add(c1).add(c2).add(q1).add(q2)
+          .add(q1BaseEmitterReverseClamp).add(q2BaseEmitterReverseClamp)
+          .add(q1BaseCollectorForwardClamp).add(q2BaseCollectorForwardClamp)
+          .add(ground)
           .connect(battery, 0, rc1, 0)
           .connect(rc1, 0, rc2, 0)
           .connect(rc2, 0, rb1, 0)
           .connect(rb1, 0, rb2, 0)
-          // GND rail: battery.1 — ground.0 — Q1.emitter — Q2.emitter
           .connect(battery, 1, ground, 0)
           .connect(ground, 0, q1, 2)
           .connect(q1, 2, q2, 2)
-          // Vc1 node: Rc1.1 — Q1.collector — C1.0
           .connect(rc1, 1, q1, 1)
           .connect(q1, 1, c1, 0)
-          // Vc2 node: Rc2.1 — Q2.collector — C2.0
           .connect(rc2, 1, q2, 1)
           .connect(q2, 1, c2, 0)
-          // Vb1 node: Rb1.1 — Q1.base — C2.1 (driven by Vc2)
           .connect(rb1, 1, q1, 0)
           .connect(q1, 0, c2, 1)
-          // Vb2 node: Rb2.1 — Q2.base — C1.1 (driven by Vc1)
           .connect(rb2, 1, q2, 0)
-          .connect(q2, 0, c1, 1);
+          .connect(q2, 0, c1, 1)
+          // External clamp paths for missing reverse Vbe and forward Vbc junctions.
+          .connect(q1, 2, q1BaseEmitterReverseClamp, 0)
+          .connect(q1BaseEmitterReverseClamp, 1, q1, 0)
+          .connect(q2, 2, q2BaseEmitterReverseClamp, 0)
+          .connect(q2BaseEmitterReverseClamp, 1, q2, 0)
+          .connect(q1, 0, q1BaseCollectorForwardClamp, 0)
+          .connect(q1BaseCollectorForwardClamp, 1, q1, 1)
+          .connect(q2, 0, q2BaseCollectorForwardClamp, 0)
+          .connect(q2BaseCollectorForwardClamp, 1, q2, 1);
     }
 
     @Override
@@ -147,15 +161,12 @@ public final class AstableMultivibratorVisualizer {
       drawResistor(g, xLb, yVcc, xLb, yBase, "Rb1 47k");
       drawResistor(g, xRb, yVcc, xRb, yBase, "Rb2 56k");
 
-      // Vcc taps
       g.setColor(rail);
-      g.drawLine(xLc, yVcc, xLc, yVcc);
       g.fillOval(xLc - 3, yVcc - 3, 6, 6);
       g.fillOval(xLb - 3, yVcc - 3, 6, 6);
       g.fillOval(xRc - 3, yVcc - 3, 6, 6);
       g.fillOval(xRb - 3, yVcc - 3, 6, 6);
 
-      // Collector / base horizontal stubs into the transistors
       g.setColor(yellow);
       g.drawLine(xLc, yCol, xL - 12, yCol);
       g.drawString(String.format("Vc1 %+.2f", vc1), xLc - 30, yCol - 6);
@@ -170,16 +181,14 @@ public final class AstableMultivibratorVisualizer {
       g.drawLine(xRb, yBase, xR - 12, yBase);
       g.drawString(String.format("Vb2 %+.2f", vb2), xRb - 74, yBase - 6);
 
-      drawTransistor(g, xL, yCol, yBase, yEmit, true, "Q1", vc1 - vb1 > 0.55);
-      drawTransistor(g, xR, yCol, yBase, yEmit, false, "Q2", vc2 - vb2 > 0.55);
+      drawTransistor(g, xL, yCol, yBase, yEmit, "Q1", vc1 - vb1 > 0.55);
+      drawTransistor(g, xR, yCol, yBase, yEmit, "Q2", vc2 - vb2 > 0.55);
 
-      // Cross-coupling capacitors: C1 from Vc1 to Vb2, C2 from Vc2 to Vb1
-      drawCapacitor(g, xL - 12, yCol, xR - 12, yBase, "C1 4.7µF");
-      drawCapacitor(g, xR + 12, yCol, xL + 12, yBase, "C2 4.7µF");
+      drawCapacitor(g, xL - 12, yCol, xR - 12, yBase, "C1 4.7uF");
+      drawCapacitor(g, xR + 12, yCol, xL + 12, yBase, "C2 4.7uF");
 
-      // Power rail indicators
       g.setColor(rail);
-      g.drawString("Asymmetry: Rb2 = 56k kicks oscillation off from rest.",
+      g.drawString("Smaller dt and explicit junction clamps keep the toy transistor model bounded.",
           left + 60, top + height - 8);
     }
 
@@ -202,34 +211,22 @@ public final class AstableMultivibratorVisualizer {
     }
 
     private static void drawTransistor(Graphics2D g, int x, int yCol, int yBase, int yEmit,
-                                        boolean leftSide, String label, boolean conducting) {
+                                       String label, boolean conducting) {
       Color body = conducting ? new Color(255, 208, 102) : new Color(150, 156, 168);
       g.setColor(body);
       g.setStroke(new BasicStroke(2f));
 
-      // Vertical body line (the transistor's spine)
       int yBody0 = yCol + 6;
       int yBody1 = yEmit - 6;
       int bodyY = (yCol + yEmit) / 2;
       g.drawLine(x, yBody0, x, yBody1);
-
-      // Base stub (short horizontal line into body)
-      int baseX = leftSide ? x - 12 : x + 12;
-      g.drawLine(baseX, yBase, x, yBase);
-
-      // Collector down-slope from top
-      g.drawLine(x, bodyY - 10, x + (leftSide ? -1 : 1) * 0, yBody0);
+      g.drawLine(x - 12, yBase, x, yBase);
       g.drawLine(x, yCol, x, yBody0);
-
-      // Emitter down-slope (with arrow for NPN)
       g.drawLine(x, yBody1, x, yEmit);
-      int ax = x;
-      int ay = yEmit - 4;
-      int arrowOffset = leftSide ? -4 : 4;
-      int[] arrowX = { ax, ax + arrowOffset, ax };
-      int[] arrowY = { ay, ay - 6, ay - 8 };
-      g.fillPolygon(arrowX, arrowY, 3);
 
+      int[] arrowX = {x, x - 4, x};
+      int[] arrowY = {yEmit - 4, yEmit - 10, yEmit - 12};
+      g.fillPolygon(arrowX, arrowY, 3);
       g.drawString(label, x - 8, bodyY + 4);
     }
 
@@ -257,9 +254,9 @@ public final class AstableMultivibratorVisualizer {
       g.drawLine(x0, y0, (int) pa0x, (int) pa0y);
       g.drawLine(x1, y1, (int) pb0x, (int) pb0y);
       g.drawLine((int) (pa0x - px * plateHalf), (int) (pa0y - py * plateHalf),
-                 (int) (pa0x + px * plateHalf), (int) (pa0y + py * plateHalf));
+          (int) (pa0x + px * plateHalf), (int) (pa0y + py * plateHalf));
       g.drawLine((int) (pb0x - px * plateHalf), (int) (pb0y - py * plateHalf),
-                 (int) (pb0x + px * plateHalf), (int) (pb0y + py * plateHalf));
+          (int) (pb0x + px * plateHalf), (int) (pb0y + py * plateHalf));
       g.drawString(label, (int) (midX + px * 18 - 24), (int) (midY + py * 18));
     }
   }

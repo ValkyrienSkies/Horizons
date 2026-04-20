@@ -97,6 +97,7 @@ public final class CircuitComponents {
   }
 
   public static final class CapacitorNode extends PowerNode {
+    private static final double LEAKAGE_RESISTANCE = 1.0e8;
     private final double capacitance;
     private double previousVoltage;
 
@@ -110,6 +111,7 @@ public final class CircuitComponents {
       double conductance = capacitance / context.getTimeStep();
       context.stampConductance(0, 1, conductance);
       context.stampCurrentSource(1, 0, conductance * previousVoltage);
+      context.stampResistance(0, 1, LEAKAGE_RESISTANCE);
     }
 
     public void postStep(PowerNetworkServer network) {
