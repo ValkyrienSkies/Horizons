@@ -4,6 +4,11 @@ import net.minecraft.core.BlockPos;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.DiodeNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.NMOSTransistorNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.NPNTransistorNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.PMOSTransistorNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.PNPTransistorNode;
 import org.valkyrienskies.horizons.potato_battery.api.network.CircuitStampContext;
 import org.valkyrienskies.horizons.potato_battery.api.network.IPBSolver;
 import org.valkyrienskies.horizons.potato_battery.impl.PowerNetworkServer;
@@ -146,6 +151,245 @@ class PowerSolverTest {
     assertTrue(benchmark.current() > 0.0, solverName + " should produce positive source current");
     assertTrue(benchmark.centerVoltage() > 0.0, solverName + " center node should be above ground");
     assertTrue(benchmark.centerVoltage() < SUPPLY_VOLTAGE, solverName + " center node should be below source voltage");
+  }
+
+  @ParameterizedTest(name = "{0} forward-biased diode settles near Shockley drop")
+  @MethodSource("solvers")
+  void diodeForwardBiasMatchesShockley(String solverName, Supplier<IPBSolver> solverFactory) {
+    FixedVoltageNode source = new FixedVoltageNode(5.0);
+    ResistorNode series = new ResistorNode(1.0e3);
+    DiodeNode diode = new DiodeNode();
+    GroundNode ground = new GroundNode();
+
+    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    addNode(network, 0, source);
+    addNode(network, 1, series);
+    addNode(network, 2, diode);
+    addNode(network, 3, ground);
+
+    connectBidirectional(source, 0, series, 0, WIRE_RESISTANCE);
+    connectBidirectional(series, 1, diode, 0, WIRE_RESISTANCE);
+    connectBidirectional(diode, 1, ground, 0, WIRE_RESISTANCE);
+    for (int i = 0; i < 20; i++) {
+      network.physTick();
+    }
+
+    double vd = network.getVoltageAt(diode, 0) - network.getVoltageAt(diode, 1);
+    double id = network.getCurrentOver(series, diode, 1, 0);
+
+    assertTrue(vd > 0.5 && vd < 0.8,
+        solverName + " expected forward diode drop in [0.5, 0.8] V, got " + vd);
+    double expectedCurrent = (5.0 - vd) / 1.0e3;
+    assertEquals(expectedCurrent, id, expectedCurrent * 0.05,
+        solverName + " diode current should match resistor current within 5%");
+  }
+
+  @ParameterizedTest(name = "{0} reverse-biased diode blocks current")
+  @MethodSource("solvers")
+  void diodeReverseBiasBlocksCurrent(String solverName, Supplier<IPBSolver> solverFactory) {
+    FixedVoltageNode source = new FixedVoltageNode(5.0);
+    ResistorNode series = new ResistorNode(1.0e3);
+    DiodeNode diode = new DiodeNode();
+    GroundNode ground = new GroundNode();
+
+    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    addNode(network, 0, source);
+    addNode(network, 1, series);
+    addNode(network, 2, diode);
+    addNode(network, 3, ground);
+
+    // Cathode toward +5 V, anode toward ground: blocks conduction.
+    connectBidirectional(source, 0, series, 0, WIRE_RESISTANCE);
+    connectBidirectional(series, 1, diode, 1, WIRE_RESISTANCE);
+    connectBidirectional(diode, 0, ground, 0, WIRE_RESISTANCE);
+    for (int i = 0; i < 20; i++) {
+      network.physTick();
+    }
+
+    double id = Math.abs(network.getCurrentOver(series, diode, 1, 1));
+    assertTrue(id < 1.0e-6, solverName + " expected near-zero reverse current, got " + id + " A");
+  }
+
+  @ParameterizedTest(name = "{0} NPN in active region shows current gain")
+  @MethodSource("solvers")
+  void npnActiveRegionHasCurrentGain(String solverName, Supplier<IPBSolver> solverFactory) {
+    FixedVoltageNode vcc = new FixedVoltageNode(5.0);
+    FixedVoltageNode vb = new FixedVoltageNode(2.0);
+    ResistorNode rc = new ResistorNode(1.0e3);
+    ResistorNode rb = new ResistorNode(100.0e3);
+    NPNTransistorNode q = new NPNTransistorNode();
+    GroundNode ground = new GroundNode();
+
+    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    addNode(network, 0, vcc);
+    addNode(network, 1, vb);
+    addNode(network, 2, rc);
+    addNode(network, 3, rb);
+    addNode(network, 4, q);
+    addNode(network, 5, ground);
+
+    connectBidirectional(vcc, 0, rc, 0, WIRE_RESISTANCE);
+    connectBidirectional(rc, 1, q, 1, WIRE_RESISTANCE);
+    connectBidirectional(vb, 0, rb, 0, WIRE_RESISTANCE);
+    connectBidirectional(rb, 1, q, 0, WIRE_RESISTANCE);
+    connectBidirectional(q, 2, ground, 0, WIRE_RESISTANCE);
+
+    for (int i = 0; i < 50; i++) {
+      network.physTick();
+    }
+
+    double vbe = network.getVoltageAt(q, 0) - network.getVoltageAt(q, 2);
+    double vce = network.getVoltageAt(q, 1) - network.getVoltageAt(q, 2);
+    double ib = network.getCurrentOver(rb, q, 1, 0);
+    double ic = network.getCurrentOver(rc, q, 1, 1);
+
+    assertTrue(vbe > 0.55 && vbe < 0.75, solverName + " expected Vbe near 0.65 V, got " + vbe);
+    assertTrue(vce > 0.3, solverName + " expected BJT in active region (Vce > 0.3 V), got " + vce);
+    assertTrue(ib > 5.0e-6 && ib < 2.5e-5, solverName + " expected Ib in ~µA range, got " + ib);
+    assertEquals(100.0, ic / ib, 20.0, solverName + " Ic/Ib should be near beta=100");
+  }
+
+  @ParameterizedTest(name = "{0} PNP in active region mirrors NPN behavior")
+  @MethodSource("solvers")
+  void pnpActiveRegionHasCurrentGain(String solverName, Supplier<IPBSolver> solverFactory) {
+    FixedVoltageNode vcc = new FixedVoltageNode(5.0);
+    FixedVoltageNode vb = new FixedVoltageNode(3.0);
+    ResistorNode rc = new ResistorNode(1.0e3);
+    ResistorNode rb = new ResistorNode(100.0e3);
+    PNPTransistorNode q = new PNPTransistorNode();
+    GroundNode ground = new GroundNode();
+
+    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    addNode(network, 0, vcc);
+    addNode(network, 1, vb);
+    addNode(network, 2, rc);
+    addNode(network, 3, rb);
+    addNode(network, 4, q);
+    addNode(network, 5, ground);
+
+    connectBidirectional(vcc, 0, q, 2, WIRE_RESISTANCE);
+    connectBidirectional(q, 1, rc, 0, WIRE_RESISTANCE);
+    connectBidirectional(rc, 1, ground, 0, WIRE_RESISTANCE);
+    connectBidirectional(vb, 0, rb, 0, WIRE_RESISTANCE);
+    connectBidirectional(rb, 1, q, 0, WIRE_RESISTANCE);
+
+    for (int i = 0; i < 50; i++) {
+      network.physTick();
+    }
+
+    double veb = network.getVoltageAt(q, 2) - network.getVoltageAt(q, 0);
+    double vec = network.getVoltageAt(q, 2) - network.getVoltageAt(q, 1);
+    double ib = network.getCurrentOver(rb, q, 1, 0);
+    double ic = network.getCurrentOver(q, rc, 1, 0);
+
+    assertTrue(veb > 0.55 && veb < 0.75, solverName + " expected Veb near 0.65 V, got " + veb);
+    assertTrue(vec > 0.3, solverName + " expected PNP in active region (Vec > 0.3 V), got " + vec);
+    assertTrue(Math.abs(ib) > 5.0e-6 && Math.abs(ib) < 2.5e-5,
+        solverName + " expected |Ib| in ~µA range, got " + ib);
+    assertEquals(100.0, Math.abs(ic / ib), 20.0, solverName + " |Ic/Ib| should be near beta=100");
+  }
+
+  @ParameterizedTest(name = "{0} NMOS in saturation follows square law")
+  @MethodSource("solvers")
+  void nmosSaturationFollowsSquareLaw(String solverName, Supplier<IPBSolver> solverFactory) {
+    FixedVoltageNode vcc = new FixedVoltageNode(5.0);
+    FixedVoltageNode vg = new FixedVoltageNode(2.0);
+    ResistorNode rd = new ResistorNode(1.0e3);
+    NMOSTransistorNode m = new NMOSTransistorNode();
+    GroundNode ground = new GroundNode();
+
+    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    addNode(network, 0, vcc);
+    addNode(network, 1, vg);
+    addNode(network, 2, rd);
+    addNode(network, 3, m);
+    addNode(network, 4, ground);
+
+    connectBidirectional(vcc, 0, rd, 0, WIRE_RESISTANCE);
+    connectBidirectional(rd, 1, m, 0, WIRE_RESISTANCE);
+    connectBidirectional(vg, 0, m, 1, WIRE_RESISTANCE);
+    connectBidirectional(m, 2, ground, 0, WIRE_RESISTANCE);
+
+    for (int i = 0; i < 20; i++) {
+      network.physTick();
+    }
+
+    double vd = network.getVoltageAt(m, 0);
+    double vgs = network.getVoltageAt(m, 1) - network.getVoltageAt(m, 2);
+    double id = network.getCurrentOver(rd, m, 1, 0);
+
+    // Defaults: Vth=1, k=1e-3. Vgs=2, Vov=1, Id_sat = k*Vov^2 = 1 mA → Vd ≈ 4 V (saturation).
+    assertTrue(vgs > 1.9 && vgs < 2.1, solverName + " gate at 2 V should give Vgs≈2, got " + vgs);
+    assertEquals(4.0, vd, 0.1, solverName + " drain voltage should be near 4 V");
+    assertEquals(1.0e-3, id, 1.0e-4, solverName + " drain current should be near 1 mA");
+  }
+
+  @ParameterizedTest(name = "{0} NMOS in triode acts as voltage-controlled resistor")
+  @MethodSource("solvers")
+  void nmosTriodeIsControllable(String solverName, Supplier<IPBSolver> solverFactory) {
+    FixedVoltageNode vcc = new FixedVoltageNode(1.0);
+    FixedVoltageNode vg = new FixedVoltageNode(3.0);
+    ResistorNode rd = new ResistorNode(100.0);
+    NMOSTransistorNode m = new NMOSTransistorNode();
+    GroundNode ground = new GroundNode();
+
+    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    addNode(network, 0, vcc);
+    addNode(network, 1, vg);
+    addNode(network, 2, rd);
+    addNode(network, 3, m);
+    addNode(network, 4, ground);
+
+    connectBidirectional(vcc, 0, rd, 0, WIRE_RESISTANCE);
+    connectBidirectional(rd, 1, m, 0, WIRE_RESISTANCE);
+    connectBidirectional(vg, 0, m, 1, WIRE_RESISTANCE);
+    connectBidirectional(m, 2, ground, 0, WIRE_RESISTANCE);
+
+    for (int i = 0; i < 20; i++) {
+      network.physTick();
+    }
+
+    double vd = network.getVoltageAt(m, 0);
+    // Vov=2, Vds<Vov so triode. Closed-form: Vds^2 − 14·Vds + 10 = 0 → Vds ≈ 0.755 V.
+    assertTrue(vd > 0.0 && vd < 1.0,
+        solverName + " drain should be between GND and Vcc, got " + vd);
+    assertEquals(0.755, vd, 0.1, solverName + " triode-mode Vd should match closed-form ≈ 0.755 V");
+  }
+
+  @ParameterizedTest(name = "{0} PMOS in saturation mirrors NMOS")
+  @MethodSource("solvers")
+  void pmosSaturationMirrorsNmos(String solverName, Supplier<IPBSolver> solverFactory) {
+    FixedVoltageNode vcc = new FixedVoltageNode(5.0);
+    FixedVoltageNode vg = new FixedVoltageNode(3.0);
+    ResistorNode rd = new ResistorNode(1.0e3);
+    PMOSTransistorNode m = new PMOSTransistorNode();
+    GroundNode ground = new GroundNode();
+
+    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    addNode(network, 0, vcc);
+    addNode(network, 1, vg);
+    addNode(network, 2, rd);
+    addNode(network, 3, m);
+    addNode(network, 4, ground);
+
+    connectBidirectional(vcc, 0, m, 2, WIRE_RESISTANCE);
+    connectBidirectional(m, 0, rd, 0, WIRE_RESISTANCE);
+    connectBidirectional(rd, 1, ground, 0, WIRE_RESISTANCE);
+    connectBidirectional(vg, 0, m, 1, WIRE_RESISTANCE);
+
+    for (int i = 0; i < 20; i++) {
+      network.physTick();
+    }
+
+    double vsg = network.getVoltageAt(m, 2) - network.getVoltageAt(m, 1);
+    double vd = network.getVoltageAt(m, 0);
+    double id = network.getCurrentOver(m, rd, 0, 0);
+
+    // Vsg=5−3=2, Vov=1, Id_sat=1 mA → Vd ≈ Id·Rd ≈ 1 V, Vsd=4 > Vov (saturation).
+    assertTrue(vsg > 1.9 && vsg < 2.1,
+        solverName + " source at 5 V, gate at 3 V should give Vsg≈2, got " + vsg);
+    assertEquals(1.0, vd, 0.1, solverName + " drain voltage should be near 1 V");
+    assertEquals(1.0e-3, id, 1.0e-4, solverName + " drain current should be near 1 mA");
   }
 
   private static PowerNetworkServer runCircuit(IPBSolver solver, FixedVoltageNode source, ResistorNode load, GroundNode ground) {
