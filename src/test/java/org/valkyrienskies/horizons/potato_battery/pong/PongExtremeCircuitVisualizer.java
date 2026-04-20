@@ -3,17 +3,24 @@ package org.valkyrienskies.horizons.potato_battery.pong;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.GroundNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.ComparatorNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.CounterNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.DeltaNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.FixedVoltageNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.GainNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.AndNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.LatchNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.MaxNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.ModCounterNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.MuxNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.MultiplyNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.NotNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.OscillatorNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.OrNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.OneShotNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.PulseAccumulatingScaleNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.QuantizedSlewNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.RectangleRasterNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.ReflectClampNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.SafeDivideNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.StripeRasterNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.SumClampNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.ToneBurstNode;
@@ -59,11 +66,26 @@ public final class PongExtremeCircuitVisualizer {
     private final VariableVoltageNode leftManual = new VariableVoltageNode(), leftAiEnable = new VariableVoltageNode(), resetTrigger = new VariableVoltageNode(), rc = new VariableVoltageNode();
     private final GroundNode g = new GroundNode();
     private final QuantizedSlewNode lp = new QuantizedSlewNode(VY - 1, V), rp = new QuantizedSlewNode(VY - 1, V);
-    private final LeftAiNode leftAi = new LeftAiNode();
+    private final DeltaNode leftAiDx = new DeltaNode(V), leftAiDy = new DeltaNode(V);
+    private final FixedVoltageNode leftAiZero = new FixedVoltageNode(0.0), leftAiWallOffset = new FixedVoltageNode(-PM * V);
+    private final ComparatorNode leftAiMovingLeft = new ComparatorNode(0.0, V, 0.0);
+    private final SumClampNode leftAiXOffset = new SumClampNode(2, V * 8.0), leftAiProjectedY = new SumClampNode(2, V * 8.0);
+    private final GainNode leftAiNegDx = new GainNode(-1.0);
+    private final SafeDivideNode leftAiTravel = new SafeDivideNode(1.0e-6, 64.0);
+    private final MultiplyNode leftAiYAdvance = new MultiplyNode(1.0);
+    private final ReflectClampNode leftAiReflectedY = new ReflectClampNode(0.0, V);
+    private final MuxNode leftAiTargetMux = new MuxNode();
     private final MuxNode leftMux = new MuxNode();
     private final WindowComparatorNode ready = new WindowComparatorNode(V * 0.05, V * 0.95, V);
     private final OneShotNode reset = new OneShotNode(DT * 3.0, V, true);
-    private final ServeNode serve = new ServeNode();
+    private final OrNode scorePulse = new OrNode();
+    private final OrNode serveStart = new OrNode();
+    private final OneShotNode serveTimer = new OneShotNode(SERVE, V, true);
+    private final NotNode serveTimerDone = new NotNode(V * 0.5, V);
+    private final AndNode serveRelease = new AndNode(V * 0.5, V);
+    private final LatchNode serveActive = new LatchNode(V);
+    private final OrNode serveDirectionSet = new OrNode();
+    private final LatchNode serveDirection = new LatchNode(V);
     private final CounterNode ls = new CounterNode(WIN, V), rs = new CounterNode(WIN, V);
     private final PulseAccumulatingScaleNode speed = new PulseAccumulatingScaleNode(0.08, 0.8, V);
     private final ComparatorNode leftWin = new ComparatorNode(V * ((WIN - 0.5) / WIN), V, 0.0);
@@ -98,25 +120,41 @@ public final class PongExtremeCircuitVisualizer {
     @Override public double timeStep() { return DT; }
 
     @Override public void build(CircuitBuilder b) {
-      b.add(leftManual).add(leftAiEnable).add(resetTrigger).add(rc).add(g).add(lp).add(rp).add(leftAi).add(leftMux).add(ready).add(reset).add(serve).add(ls).add(rs).add(speed).add(leftWin).add(rightWin).add(runSet).add(run).add(vball).add(hball)
+      b.add(leftManual).add(leftAiEnable).add(resetTrigger).add(rc).add(g).add(lp).add(rp).add(leftAiDx).add(leftAiDy).add(leftAiZero).add(leftAiWallOffset).add(leftAiMovingLeft).add(leftAiXOffset).add(leftAiNegDx).add(leftAiTravel).add(leftAiYAdvance).add(leftAiProjectedY).add(leftAiReflectedY).add(leftAiTargetMux).add(leftMux).add(ready).add(reset).add(scorePulse).add(serveStart).add(serveTimer).add(serveTimerDone).add(serveRelease).add(serveActive).add(serveDirectionSet).add(serveDirection).add(ls).add(rs).add(speed).add(leftWin).add(rightWin).add(runSet).add(run).add(vball).add(hball)
           .add(leftPaddleX).add(rightPaddleX)
           .add(clk).add(hscan).add(vscan).add(lpv).add(rpv).add(bv).add(lsv).add(rsv).add(net).add(mix)
           .add(hitSound).add(bounceSound).add(scoreSound).add(audioMix)
           .connect(leftManual,0,leftMux,0).connect(leftManual,1,g,0).connect(leftAiEnable,0,leftMux,2).connect(leftAiEnable,1,g,0)
           .connect(resetTrigger,0,reset,0).connect(resetTrigger,1,g,0)
-          .connect(leftAi,3,leftMux,1).connect(leftMux,3,lp,0)
+          .connect(hball,5,leftAiDx,0).connect(reset,0,leftAiDx,1)
+          .connect(vball,4,leftAiDy,0).connect(reset,0,leftAiDy,1)
+          .connect(leftAiZero,0,leftAiMovingLeft,0).connect(leftAiDx,2,leftAiMovingLeft,1)
+          .connect(hball,5,leftAiXOffset,0).connect(leftAiWallOffset,0,leftAiXOffset,1)
+          .connect(leftAiDx,2,leftAiNegDx,0)
+          .connect(leftAiXOffset,2,leftAiTravel,0).connect(leftAiNegDx,1,leftAiTravel,1)
+          .connect(leftAiDy,2,leftAiYAdvance,0).connect(leftAiTravel,2,leftAiYAdvance,1)
+          .connect(vball,4,leftAiProjectedY,0).connect(leftAiYAdvance,2,leftAiProjectedY,1)
+          .connect(leftAiProjectedY,2,leftAiReflectedY,0)
+          .connect(lp,1,leftAiTargetMux,0).connect(leftAiReflectedY,1,leftAiTargetMux,1).connect(leftAiMovingLeft,2,leftAiTargetMux,2)
+          .connect(leftAiTargetMux,3,leftMux,1).connect(leftMux,3,lp,0)
           .connect(rc,0,rp,0).connect(rc,1,g,0)
-          .connect(hball,5,leftAi,0).connect(vball,4,leftAi,1).connect(lp,1,leftAi,2)
           .connect(lp,1,ready,0)
           .connect(lp,1,vball,0).connect(rp,1,vball,1).connect(lp,1,hball,0).connect(rp,1,hball,1)
           .connect(vball,4,hball,2).connect(hball,6,vball,2).connect(hball,7,vball,3)
-          .connect(hball,8,serve,0).connect(hball,9,serve,1).connect(ready,1,serve,4)
+          .connect(hball,8,scorePulse,0).connect(hball,9,scorePulse,1)
+          .connect(scorePulse,2,serveStart,0).connect(reset,0,serveStart,1)
+          .connect(serveStart,2,serveTimer,0).connect(g,0,serveTimer,1)
+          .connect(serveTimer,2,serveTimerDone,0)
+          .connect(ready,1,serveRelease,0).connect(serveTimerDone,1,serveRelease,1)
+          .connect(serveStart,2,serveActive,0).connect(serveRelease,2,serveActive,1)
+          .connect(hball,9,serveDirectionSet,0).connect(reset,0,serveDirectionSet,1)
+          .connect(serveDirectionSet,2,serveDirection,0).connect(hball,8,serveDirection,1)
           .connect(hball,8,ls,0).connect(reset,0,ls,1).connect(hball,9,rs,0).connect(reset,0,rs,1)
-          .connect(hball,6,speed,0).connect(serve,2,speed,1).connect(speed,2,hball,10)
+          .connect(hball,6,speed,0).connect(serveActive,2,speed,1).connect(speed,2,hball,10)
           .connect(ls,2,leftWin,0).connect(g,0,leftWin,1).connect(rs,2,rightWin,0).connect(g,0,rightWin,1)
           .connect(leftWin,2,runSet,0).connect(rightWin,2,runSet,1).connect(runSet,2,run,0).connect(reset,0,run,1)
           .connect(run,2,hball,11).connect(run,2,vball,5)
-          .connect(serve,2,hball,3).connect(serve,3,hball,4).connect(reset,0,hball,12).connect(reset,0,vball,7)
+          .connect(serveActive,2,hball,3).connect(serveDirection,2,hball,4).connect(reset,0,hball,12).connect(reset,0,vball,7)
           .connect(clk,0,hscan,0).connect(reset,0,hscan,1).connect(hscan,3,vscan,0).connect(reset,0,vscan,1)
           .connect(hscan,2,lpv,0).connect(vscan,2,lpv,1).connect(leftPaddleX,0,lpv,2).connect(lp,1,lpv,3)
           .connect(hscan,2,rpv,0).connect(vscan,2,rpv,1).connect(rightPaddleX,0,rpv,2).connect(rp,1,rpv,3)
@@ -124,8 +162,8 @@ public final class PongExtremeCircuitVisualizer {
           .connect(hscan,2,lsv,0).connect(vscan,2,lsv,1).connect(ls,2,lsv,2)
           .connect(hscan,2,rsv,0).connect(vscan,2,rsv,1).connect(rs,2,rsv,2)
           .connect(hscan,2,net,0).connect(vscan,2,net,1)
-          .connect(lpv,3,mix,0).connect(rpv,3,mix,1).connect(bv,4,mix,2).connect(lsv,3,mix,3).connect(rsv,3,mix,4).connect(net,2,mix,5)
-          .connect(serve,2,bounceInhibit,0).connect(run,2,bounceInhibit,1);
+          .connect(lpv,4,mix,0).connect(rpv,4,mix,1).connect(bv,4,mix,2).connect(lsv,3,mix,3).connect(rsv,3,mix,4).connect(net,2,mix,5)
+          .connect(serveActive,2,bounceInhibit,0).connect(run,2,bounceInhibit,1);
       b.connect(hball,6,hitSound,0).connect(g,0,hitSound,1).connect(run,2,hitSound,2)
           .connect(vball,6,bounceSound,0).connect(g,0,bounceSound,1).connect(bounceInhibit,2,bounceSound,2)
           .connect(hball,8,scoreSound,0).connect(hball,9,scoreSound,1).connect(run,2,scoreSound,2)
@@ -222,7 +260,7 @@ public final class PongExtremeCircuitVisualizer {
       });
     }
 
-    private void triggerReset() { resetRequested = true; serve.arm(true); speed.reset(); lp.reset(); rp.reset(); clk.reset(); hscan.reset(); vscan.reset(); hitSound.reset(); bounceSound.reset(); scoreSound.reset(); audio.reset(); over = false; }
+    private void triggerReset() { resetRequested = true; speed.reset(); lp.reset(); rp.reset(); clk.reset(); hscan.reset(); vscan.reset(); serveTimer.reset(); serveActive.reset(); serveDirection.reset(); hitSound.reset(); bounceSound.reset(); scoreSound.reset(); audio.reset(); over = false; }
     private static double steer(double cur, boolean up, boolean down) { return c01(cur + ((down == up) ? 0.0 : (down ? 1 : -1) * PS * DT)); }
     private double runOutput() { return over ? 1.0 : 0.0; }
     private void updateRaster() {
@@ -281,43 +319,6 @@ public final class PongExtremeCircuitVisualizer {
     }
   }
 
-  private static final class LeftAiNode extends PowerNode {
-    private double target = 0.5, prevX = 0.5, prevY = 0.5; private LeftAiNode() { super(4); }
-    @Override public int getVoltageSourceCount() { return 1; }
-    @Override public PowerNodeSimulationMode getSimulationMode() { return PowerNodeSimulationMode.DYNAMIC_LINEAR; }
-    @Override public void stamp(CircuitStampContext c) { c.stampVoltageSource(0,3,CircuitStampContext.GROUND,target * V); }
-    @Override public void onSubstepComplete(IPowerNetwork<?> n, double dt) {
-      double x = c01(n.getVoltageAt(this,0) / V), y = c01(n.getVoltageAt(this,1) / V), paddle = c01(n.getVoltageAt(this,2) / V);
-      double vx = (x - prevX) / Math.max(1.0e-6, dt), vy = (y - prevY) / Math.max(1.0e-6, dt);
-      prevX = x; prevY = y;
-      if (vx >= 0.0) {
-        target = paddle;
-        return;
-      }
-      double travel = (x - c01(PM)) / Math.max(1.0e-6, -vx);
-      double projected = y + vy * travel;
-      while (projected < 0.0 || projected > 1.0) {
-        if (projected < 0.0) projected = -projected;
-        if (projected > 1.0) projected = 2.0 - projected;
-      }
-      target = c01(projected);
-    }
-  }
-  private static final class ServeNode extends PowerNode {
-    private double rem = SERVE; private boolean toRight = true, active = true; private double pl, pr; private ServeNode() { super(5); }
-    @Override public int getVoltageSourceCount() { return 2; }
-    @Override public PowerNodeSimulationMode getSimulationMode() { return PowerNodeSimulationMode.DYNAMIC_LINEAR; }
-    @Override public void stamp(CircuitStampContext c) { c.stampVoltageSource(0,2,CircuitStampContext.GROUND, active ? V : 0); c.stampVoltageSource(1,3,CircuitStampContext.GROUND, toRight ? V : 0); }
-    @Override public void onSubstepComplete(IPowerNetwork<?> n, double dt) {
-      double l = n.getVoltageAt(this,0), r = n.getVoltageAt(this,1), ready = n.getVoltageAt(this,4);
-      if (l > 2.5 && pl <= 2.5) arm(false);
-      if (r > 2.5 && pr <= 2.5) arm(true);
-      if (active && rem > 0) rem = Math.max(0.0, rem - dt);
-      if (active && rem <= 0.0 && ready > 2.5) active = false;
-      pl = l; pr = r;
-    }
-    void arm(boolean tr) { toRight = tr; active = true; rem = SERVE; pl = 0; pr = 0; }
-  }
   private static final class VBallNode extends PowerNode {
     private int cell = (VY - 1) / 2, dir = 1; private double stepAccum; private boolean bounce; private VBallNode() { super(8); }
     @Override public int getVoltageSourceCount() { return 2; }
