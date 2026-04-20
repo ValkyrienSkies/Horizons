@@ -5,7 +5,7 @@ import org.valkyrienskies.horizons.potato_battery.api.network.CircuitStampContex
 import org.valkyrienskies.horizons.potato_battery.api.network.IPBSolver;
 import org.valkyrienskies.horizons.potato_battery.api.network.node.PowerNodeSimulationMode;
 import org.valkyrienskies.horizons.potato_battery.impl.PowerNetworkServer;
-import org.valkyrienskies.horizons.potato_battery.impl.network.node.PowerNode;
+import org.valkyrienskies.horizons.potato_battery.api.network.node.PowerNode;
 
 public final class CircuitComponents {
   private static final double DYNAMIC_LINEAR_MAX_STEP = 1.0 / 1000.0;

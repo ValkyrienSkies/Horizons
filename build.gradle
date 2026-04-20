@@ -232,6 +232,17 @@ tasks.register("runAstableMultivibratorVisualizer", JavaExec) {
     systemProperty "power.solver", solverName
 }
 
+tasks.register("runPongCircuitVisualizer", JavaExec) {
+    group = "verification"
+    description = "Launch the manual Pong circuit visualizer"
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "org.valkyrienskies.horizons.potato_battery.PongCircuitVisualizer"
+
+    def solverName = (project.findProperty("powerSolver") ?: "jklu").toString()
+    systemProperty "power.solver", solverName
+}
+
 tasks.register("runAstableSpikeDiagnostics", JavaExec) {
     group = "verification"
     description = "Run a long astable multivibrator soak and write CSV diagnostics"

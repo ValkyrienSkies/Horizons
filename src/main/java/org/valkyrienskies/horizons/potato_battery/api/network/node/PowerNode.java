@@ -1,10 +1,8 @@
-package org.valkyrienskies.horizons.potato_battery.impl.network.node;
+package org.valkyrienskies.horizons.potato_battery.api.network.node;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork;
 import org.valkyrienskies.horizons.potato_battery.api.network.Connection;
-import org.valkyrienskies.horizons.potato_battery.api.network.node.PowerNodeSimulationMode;
-import org.valkyrienskies.horizons.potato_battery.api.network.node.IPowerNode;
 
 import javax.annotation.Nullable;
 import java.util.HashSet;

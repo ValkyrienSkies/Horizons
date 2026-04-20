@@ -9,7 +9,7 @@ import org.valkyrienskies.horizons.potato_battery.CircuitComponents.NPNTransisto
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.ResistorNode;
 import org.valkyrienskies.horizons.potato_battery.api.network.IPBSolver;
 import org.valkyrienskies.horizons.potato_battery.impl.PowerNetworkServer;
-import org.valkyrienskies.horizons.potato_battery.impl.network.node.PowerNode;
+import org.valkyrienskies.horizons.potato_battery.api.network.node.PowerNode;
 import org.valkyrienskies.horizons.potato_battery.impl.network.solver.EJMLSolver;
 import org.valkyrienskies.horizons.potato_battery.impl.network.solver.JKLUSolver;
 import org.valkyrienskies.horizons.potato_battery.impl.network.solver.SolverDebugHooks;
