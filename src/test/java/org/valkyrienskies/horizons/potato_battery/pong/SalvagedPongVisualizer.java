@@ -1,7 +1,8 @@
-package org.valkyrienskies.horizons.potato_battery;
+package org.valkyrienskies.horizons.potato_battery.pong;
 
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.GroundNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.VariableVoltageNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitVisualizer;
 import org.valkyrienskies.horizons.potato_battery.CircuitVisualizer.CircuitBuilder;
 import org.valkyrienskies.horizons.potato_battery.CircuitVisualizer.Readout;
 import org.valkyrienskies.horizons.potato_battery.CircuitVisualizer.Scenario;

@@ -62,7 +62,11 @@ public final class CircuitVisualizer {
       frame.setContentPane(root);
       frame.pack();
       frame.setLocationRelativeTo(null);
+      frame.setAlwaysOnTop(true);
       frame.setVisible(true);
+      frame.toFront();
+      frame.requestFocus();
+      SwingUtilities.invokeLater(() -> frame.setAlwaysOnTop(false));
       model.start(frame);
     });
   }
