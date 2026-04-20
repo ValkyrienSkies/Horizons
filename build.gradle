@@ -218,3 +218,13 @@ tasks.register("runRLCCircuitVisualizer", JavaExec) {
     def solverName = (project.findProperty("powerSolver") ?: "jklu").toString()
     systemProperty "power.solver", solverName
 }
+
+tasks.register("runAstableMultivibratorVisualizer", JavaExec) {
+    group = "verification"
+    description = "Launch the manual astable multivibrator (transistor oscillator) visualizer"
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "org.valkyrienskies.horizons.potato_battery.AstableMultivibratorVisualizer"
+
+    def solverName = (project.findProperty("powerSolver") ?: "jklu").toString()
+    systemProperty "power.solver", solverName
+}
