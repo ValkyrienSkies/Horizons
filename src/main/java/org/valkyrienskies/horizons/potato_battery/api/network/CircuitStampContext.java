@@ -23,4 +23,8 @@ public interface CircuitStampContext {
   void stampCurrentSource(int fromPort, int toPort, double current);
 
   void stampVoltageSource(int sourceIndex, int positivePort, int negativePort, double voltage);
+
+  void stampVCCS(int outPositive, int outNegative, int controlPositive, int controlNegative, double transconductance);
+
+  void stampVCVS(int sourceIndex, int outPositive, int outNegative, int controlPositive, int controlNegative, double gain);
 }

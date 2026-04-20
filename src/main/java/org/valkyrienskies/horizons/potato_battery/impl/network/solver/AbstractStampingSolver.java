@@ -231,6 +231,55 @@ abstract class AbstractStampingSolver implements IPBSolver {
       rhs[equation] += voltage;
     }
 
+    @Override
+    public void stampVCCS(int outPositive, int outNegative, int controlPositive, int controlNegative, double transconductance) {
+      int outPositiveEquation = equationForPort(outPositive);
+      int outNegativeEquation = equationForPort(outNegative);
+      int controlPositiveEquation = equationForPort(controlPositive);
+      int controlNegativeEquation = equationForPort(controlNegative);
+
+      if (outPositiveEquation >= 0 && controlPositiveEquation >= 0) {
+        matrix.add(outPositiveEquation, controlPositiveEquation, transconductance);
+      }
+      if (outPositiveEquation >= 0 && controlNegativeEquation >= 0) {
+        matrix.add(outPositiveEquation, controlNegativeEquation, -transconductance);
+      }
+      if (outNegativeEquation >= 0 && controlPositiveEquation >= 0) {
+        matrix.add(outNegativeEquation, controlPositiveEquation, -transconductance);
+      }
+      if (outNegativeEquation >= 0 && controlNegativeEquation >= 0) {
+        matrix.add(outNegativeEquation, controlNegativeEquation, transconductance);
+      }
+    }
+
+    @Override
+    public void stampVCVS(int sourceIndex, int outPositive, int outNegative, int controlPositive, int controlNegative, double gain) {
+      if (sourceIndex < 0 || sourceIndex >= topology.sourceCount) {
+        throw new IllegalArgumentException("Invalid voltage source index " + sourceIndex);
+      }
+
+      int equation = topology.sourceEquationBase + sourceIndex;
+      int outPositiveEquation = equationForPort(outPositive);
+      int outNegativeEquation = equationForPort(outNegative);
+      int controlPositiveEquation = equationForPort(controlPositive);
+      int controlNegativeEquation = equationForPort(controlNegative);
+
+      if (outPositiveEquation >= 0) {
+        matrix.add(outPositiveEquation, equation, 1.0);
+        matrix.add(equation, outPositiveEquation, 1.0);
+      }
+      if (outNegativeEquation >= 0) {
+        matrix.add(outNegativeEquation, equation, -1.0);
+        matrix.add(equation, outNegativeEquation, -1.0);
+      }
+      if (controlPositiveEquation >= 0) {
+        matrix.add(equation, controlPositiveEquation, -gain);
+      }
+      if (controlNegativeEquation >= 0) {
+        matrix.add(equation, controlNegativeEquation, gain);
+      }
+    }
+
     private int equationForPort(int port) {
       if (port == GROUND) {
         return -1;
