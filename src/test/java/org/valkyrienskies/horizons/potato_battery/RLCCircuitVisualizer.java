@@ -4,6 +4,7 @@ import org.valkyrienskies.horizons.potato_battery.CircuitComponents.CapacitorNod
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.GroundNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.InductorNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.ResistorNode;
+import org.valkyrienskies.horizons.potato_battery.CircuitComponents.VariableCurrentSourceNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitComponents.VariableVoltageNode;
 import org.valkyrienskies.horizons.potato_battery.CircuitVisualizer.CircuitBuilder;
 import org.valkyrienskies.horizons.potato_battery.CircuitVisualizer.Readout;
@@ -15,6 +16,9 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.util.List;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JSlider;
 
 public final class RLCCircuitVisualizer {
   public static void main(String[] args) {
@@ -23,13 +27,18 @@ public final class RLCCircuitVisualizer {
 
   private static final class RLCScenario implements Scenario {
     private static final double TIME_STEP = 1.0 / 240.0;
+    private static final double DEFAULT_VOLTAGE_AMPLITUDE = 10.0;
+    private static final double DEFAULT_CURRENT_INJECTION = 0.0;
 
     private final VariableVoltageNode source = new VariableVoltageNode();
+    private final VariableCurrentSourceNode currentSource = new VariableCurrentSourceNode();
     private final ResistorNode resistor = new ResistorNode(12.0);
     private final InductorNode inductor = new InductorNode(0.060);
     private final CapacitorNode capacitor = new CapacitorNode(0.0015);
     private final GroundNode ground = new GroundNode();
 
+    private volatile double sourceAmplitude = DEFAULT_VOLTAGE_AMPLITUDE;
+    private volatile double injectedCurrent = DEFAULT_CURRENT_INJECTION;
     private double sourceVoltage;
     private double loopCurrent;
     private double capacitorVoltage;
@@ -47,17 +56,20 @@ public final class RLCCircuitVisualizer {
 
     @Override
     public void build(CircuitBuilder b) {
-      b.add(source).add(resistor).add(inductor).add(capacitor).add(ground)
+      b.add(source).add(currentSource).add(resistor).add(inductor).add(capacitor).add(ground)
+          .connect(source, 0, currentSource, 0)
           .connect(source, 0, resistor, 0)
           .connect(resistor, 1, inductor, 0)
           .connect(inductor, 1, capacitor, 0)
           .connect(capacitor, 1, ground, 0)
+          .connect(currentSource, 1, ground, 0)
           .connect(source, 1, ground, 0);
     }
 
     @Override
     public void beforeStep(double time) {
-      source.setVoltage(10.0 * Math.sin(time * Math.PI * 2.0 * 3.0));
+      source.setVoltage(sourceAmplitude * Math.sin(time * Math.PI * 2.0 * 3.0));
+      currentSource.setCurrent(injectedCurrent);
     }
 
     @Override
@@ -74,7 +86,8 @@ public final class RLCCircuitVisualizer {
           new Trace("yellow: source voltage", new Color(255, 208, 102), 12.0, () -> sourceVoltage),
           new Trace("green: capacitor voltage", new Color(172, 235, 149), 12.0, () -> capacitorVoltage),
           new Trace("orange: inductor voltage", new Color(255, 150, 120), 12.0, () -> inductorVoltage),
-          new Trace("blue: loop current", new Color(120, 200, 255), 1.5, () -> loopCurrent)
+          new Trace("blue: loop current", new Color(120, 200, 255), 1.5, () -> loopCurrent),
+          new Trace("white: injected current", new Color(230, 235, 240), 1.5, () -> injectedCurrent)
       );
     }
 
@@ -84,8 +97,29 @@ public final class RLCCircuitVisualizer {
           new Readout("Source: %.3f V", () -> sourceVoltage),
           new Readout("Capacitor: %.3f V", () -> capacitorVoltage),
           new Readout("Loop current: %.6f A", () -> loopCurrent),
-          new Readout("Inductor: %.3f V", () -> inductorVoltage)
+          new Readout("Inductor: %.3f V", () -> inductorVoltage),
+          new Readout("Amp: %.2f V", () -> sourceAmplitude),
+          new Readout("Inject: %+.4f A", () -> injectedCurrent)
       );
+    }
+
+    @Override
+    public void populateControls(JPanel controls) {
+      JLabel amplitudeLabel = CircuitVisualizer.createValueLabel(String.format("%.1f V", sourceAmplitude));
+      JSlider amplitudeSlider = new JSlider(0, 240, (int) Math.round(sourceAmplitude * 10.0));
+      amplitudeSlider.addChangeListener(event -> {
+        sourceAmplitude = amplitudeSlider.getValue() / 10.0;
+        amplitudeLabel.setText(String.format("%.1f V", sourceAmplitude));
+      });
+      controls.add(CircuitVisualizer.labeledControl("Voltage Amp", amplitudeSlider, amplitudeLabel));
+
+      JLabel currentLabel = CircuitVisualizer.createValueLabel(String.format("%+.3f A", injectedCurrent));
+      JSlider currentSlider = new JSlider(-200, 200, (int) Math.round(injectedCurrent * 1000.0));
+      currentSlider.addChangeListener(event -> {
+        injectedCurrent = currentSlider.getValue() / 1000.0;
+        currentLabel.setText(String.format("%+.3f A", injectedCurrent));
+      });
+      controls.add(CircuitVisualizer.labeledControl("Input Current", currentSlider, currentLabel));
     }
 
     @Override
@@ -111,6 +145,14 @@ public final class RLCCircuitVisualizer {
       g.drawLine(x0 - 10, y - 20, x0 - 10, y + 20);
       g.drawLine(x0 + 10, y - 32, x0 + 10, y + 32);
       g.drawString("AC Source", x0 - 28, y - 42);
+      g.drawString(String.format("Amp %.1f V", sourceAmplitude), x0 - 28, y - 56);
+
+      g.setColor(new Color(230, 235, 240));
+      g.drawLine(x0 + 42, y - 26, x0 + 42, y + 26);
+      g.drawLine(x0 + 42, y - 26, x0 + 34, y - 12);
+      g.drawLine(x0 + 42, y - 26, x0 + 50, y - 12);
+      g.drawString("Iin", x0 + 30, y - 42);
+      g.drawString(String.format("%+.3f A", injectedCurrent), x0 + 18, y + 44);
 
       g.setColor(new Color(120, 200, 255));
       for (int i = -2; i <= 2; i++) {

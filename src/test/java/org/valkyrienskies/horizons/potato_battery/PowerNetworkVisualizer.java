@@ -19,6 +19,7 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.util.concurrent.locks.LockSupport;
 
 public final class PowerNetworkVisualizer {
   private static final int GRID_WIDTH = 16;
@@ -26,6 +27,7 @@ public final class PowerNetworkVisualizer {
   private static final double CELL_RESISTANCE = 12.0;
   private static final double WIRE_RESISTANCE = 1.0e-6;
   private static final int TIMER_MS = 33;
+  private static final double TIME_STEP_SECONDS = PowerNetworkServer.DEFAULT_TIME_STEP;
 
   public static void main(String[] args) {
     SwingUtilities.invokeLater(() -> {
@@ -57,10 +59,16 @@ public final class PowerNetworkVisualizer {
     private final JunctionNode groundBus = new JunctionNode(GRID_HEIGHT + 1);
     private final JunctionNode[][] grid = new JunctionNode[GRID_WIDTH][GRID_HEIGHT];
     private final PowerNetworkServer network;
+    private final Object stateLock = new Object();
     private double sourceCurrent;
     private double centerVoltage;
     private double batteryVoltage;
     private long ticks;
+    private final long stepNanos = Math.max(1L, Math.round(TIME_STEP_SECONDS * 1_000_000_000.0));
+    private final int maxStepsPerBurst = Math.max(1, (int) Math.ceil((TIMER_MS / 1000.0) / TIME_STEP_SECONDS) + 1);
+    private final long maxAccumulatedStepNanos = stepNanos * maxStepsPerBurst;
+    private volatile boolean running;
+    private Thread simulationThread;
 
     private VisualizerModel(IPBSolver solver) {
       this.network = new PowerNetworkServer(null, null, solver);
@@ -69,15 +77,45 @@ public final class PowerNetworkVisualizer {
     }
 
     private void start(JFrame frame) {
+      running = true;
+      simulationThread = new Thread(() -> runSimulationLoop(frame), "potato-power-grid-sim");
+      simulationThread.setDaemon(true);
+      simulationThread.start();
       Timer timer = new Timer(TIMER_MS, event -> {
         if (!frame.isDisplayable()) {
+          running = false;
+          if (simulationThread != null) {
+            simulationThread.interrupt();
+          }
           ((Timer) event.getSource()).stop();
           return;
         }
-        step();
         frame.repaint();
       });
       timer.start();
+    }
+
+    private void runSimulationLoop(JFrame frame) {
+      long lastNanos = System.nanoTime();
+      long accumulatedNanos = 0L;
+      while (running && frame.isDisplayable()) {
+        long now = System.nanoTime();
+        accumulatedNanos = Math.min(accumulatedNanos + Math.max(0L, now - lastNanos), maxAccumulatedStepNanos);
+        lastNanos = now;
+
+        int executed = 0;
+        while (executed < maxStepsPerBurst && accumulatedNanos >= stepNanos) {
+          step();
+          accumulatedNanos -= stepNanos;
+          executed++;
+        }
+
+        if (accumulatedNanos < stepNanos) {
+          LockSupport.parkNanos(Math.min(stepNanos - accumulatedNanos, 1_000_000L));
+        } else {
+          Thread.yield();
+        }
+      }
     }
 
     private void buildNetwork() {
@@ -117,12 +155,14 @@ public final class PowerNetworkVisualizer {
     }
 
     private void step() {
-      ticks++;
-      batteryVoltage = 7.5 + Math.sin(ticks * 0.05) * 2.5;
-      battery.setVoltage(batteryVoltage);
-      network.physTick();
-      sourceCurrent = Math.abs(network.getCurrentOver(battery, sourceBus, 0, 0));
-      centerVoltage = averageVoltage(grid[GRID_WIDTH / 2][GRID_HEIGHT / 2]);
+      synchronized (stateLock) {
+        ticks++;
+        batteryVoltage = 7.5 + Math.sin(ticks * 0.05) * 2.5;
+        battery.setVoltage(batteryVoltage);
+        network.physTick();
+        sourceCurrent = Math.abs(network.getCurrentOver(battery, sourceBus, 0, 0));
+        centerVoltage = averageVoltage(grid[GRID_WIDTH / 2][GRID_HEIGHT / 2]);
+      }
     }
 
     private double averageVoltage(PowerNode node) {
@@ -164,41 +204,43 @@ public final class PowerNetworkVisualizer {
       g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
       g.setFont(LABEL_FONT);
 
-      int left = 80;
-      int top = 110;
-      int stepX = 56;
-      int stepY = 48;
-      int radius = 18;
+      synchronized (model.stateLock) {
+        int left = 80;
+        int top = 110;
+        int stepX = 56;
+        int stepY = 48;
+        int radius = 18;
 
-      g.setColor(new Color(220, 225, 235));
-      g.drawString("Solver: " + model.solverName, 40, 36);
-      g.drawString(String.format("Battery: %.3f V", model.batteryVoltage), 40, 60);
-      g.drawString(String.format("Source current: %.6f A", model.sourceCurrent), 260, 36);
-      g.drawString(String.format("Center voltage: %.6f V", model.centerVoltage), 260, 60);
-      g.drawString("Blue = low voltage, red = high voltage", 540, 36);
+        g.setColor(new Color(220, 225, 235));
+        g.drawString("Solver: " + model.solverName, 40, 36);
+        g.drawString(String.format("Battery: %.3f V", model.batteryVoltage), 40, 60);
+        g.drawString(String.format("Source current: %.6f A", model.sourceCurrent), 260, 36);
+        g.drawString(String.format("Center voltage: %.6f V", model.centerVoltage), 260, 60);
+        g.drawString("Blue = low voltage, red = high voltage", 540, 36);
 
-      for (int x = 0; x < GRID_WIDTH; x++) {
-        for (int y = 0; y < GRID_HEIGHT; y++) {
-          int px = left + x * stepX;
-          int py = top + y * stepY;
-          double voltage = model.voltageAt(x, y);
-          g.setColor(colorForVoltage(voltage, model.batteryVoltage));
-          g.fillOval(px - radius, py - radius, radius * 2, radius * 2);
-          g.setColor(new Color(30, 34, 42));
-          g.drawOval(px - radius, py - radius, radius * 2, radius * 2);
-          g.setColor(Color.WHITE);
-          g.drawString(String.format("%.1f", voltage), px - 14, py + 5);
+        for (int x = 0; x < GRID_WIDTH; x++) {
+          for (int y = 0; y < GRID_HEIGHT; y++) {
+            int px = left + x * stepX;
+            int py = top + y * stepY;
+            double voltage = model.voltageAt(x, y);
+            g.setColor(colorForVoltage(voltage, model.batteryVoltage));
+            g.fillOval(px - radius, py - radius, radius * 2, radius * 2);
+            g.setColor(new Color(30, 34, 42));
+            g.drawOval(px - radius, py - radius, radius * 2, radius * 2);
+            g.setColor(Color.WHITE);
+            g.drawString(String.format("%.1f", voltage), px - 14, py + 5);
+          }
         }
-      }
 
-      int busX = left - 48;
-      int groundX = left + (GRID_WIDTH - 1) * stepX + 48;
-      g.setColor(new Color(255, 204, 96));
-      g.fillRoundRect(busX - 10, top - 24, 20, (GRID_HEIGHT - 1) * stepY + 48, 10, 10);
-      g.drawString("+", busX - 4, top - 36);
-      g.setColor(new Color(120, 180, 255));
-      g.fillRoundRect(groundX - 10, top - 24, 20, (GRID_HEIGHT - 1) * stepY + 48, 10, 10);
-      g.drawString("-", groundX - 4, top - 36);
+        int busX = left - 48;
+        int groundX = left + (GRID_WIDTH - 1) * stepX + 48;
+        g.setColor(new Color(255, 204, 96));
+        g.fillRoundRect(busX - 10, top - 24, 20, (GRID_HEIGHT - 1) * stepY + 48, 10, 10);
+        g.drawString("+", busX - 4, top - 36);
+        g.setColor(new Color(120, 180, 255));
+        g.fillRoundRect(groundX - 10, top - 24, 20, (GRID_HEIGHT - 1) * stepY + 48, 10, 10);
+        g.drawString("-", groundX - 4, top - 36);
+      }
 
       g.setColor(new Color(220, 225, 235));
       g.drawString("Close the window to stop the simulation.", 40, getHeight() - 32);

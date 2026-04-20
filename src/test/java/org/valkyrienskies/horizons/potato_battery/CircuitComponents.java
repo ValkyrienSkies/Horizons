@@ -9,7 +9,9 @@ import org.valkyrienskies.horizons.potato_battery.impl.network.node.PowerNode;
 
 public final class CircuitComponents {
   private static final double DYNAMIC_LINEAR_MAX_STEP = 1.0 / 1000.0;
-  private static final double DYNAMIC_NONLINEAR_MAX_STEP = 1.0 / 8000.0;
+  private static final double DIODE_MAX_STEP = 1.0 / 4000.0;
+  private static final double BJT_MAX_STEP = 1.0 / 8000.0;
+  private static final double MOS_MAX_STEP = 1.0 / 4000.0;
 
   private static final double EXP_LIMIT = 40.0;
   private static final double MIN_CONDUCTANCE = 1.0e-12;
@@ -168,6 +170,33 @@ public final class CircuitComponents {
     @Override
     public void stamp(CircuitStampContext context) {
       context.stampVoltageSource(0, 0, CircuitStampContext.GROUND, voltage);
+    }
+  }
+
+  public static final class VariableCurrentSourceNode extends PowerNode {
+    private volatile double current;
+
+    public VariableCurrentSourceNode() {
+      super(2);
+    }
+
+    public void setCurrent(double current) {
+      this.current = current;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(current);
+    }
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      context.stampCurrentSource(0, 1, current);
     }
   }
 
@@ -352,7 +381,7 @@ public final class CircuitComponents {
 
     @Override
     public double getSuggestedMaxTimeStepSeconds() {
-      return DYNAMIC_NONLINEAR_MAX_STEP;
+      return DIODE_MAX_STEP;
     }
   }
 
@@ -509,7 +538,7 @@ public final class CircuitComponents {
 
     @Override
     public double getSuggestedMaxTimeStepSeconds() {
-      return DYNAMIC_NONLINEAR_MAX_STEP;
+      return BJT_MAX_STEP;
     }
   }
 
@@ -712,7 +741,7 @@ public final class CircuitComponents {
 
     @Override
     public double getSuggestedMaxTimeStepSeconds() {
-      return DYNAMIC_NONLINEAR_MAX_STEP;
+      return MOS_MAX_STEP;
     }
   }
 

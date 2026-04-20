@@ -28,12 +28,14 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.function.DoubleSupplier;
+import java.util.concurrent.locks.LockSupport;
 
 public final class CircuitVisualizer {
   private static final int TIMER_MS = 16;
-  private static final int SUBSTEPS_PER_FRAME = 4;
   private static final int HISTORY = 520;
   private static final double WIRE_RESISTANCE = 1.0e-6;
+  private static final double AUTO_SCALE_HEADROOM = 1.15;
+  private static final double AUTO_SCALE_MIN = 1.0e-3;
 
   private CircuitVisualizer() {}
 
@@ -146,18 +148,27 @@ public final class CircuitVisualizer {
     private final List<Trace> traces;
     private final List<Readout> readouts;
     private final List<Deque<Double>> histories;
+    private final Object stateLock = new Object();
     private double time;
     private long statsWindowStartNanos = System.nanoTime();
+    private final long stepNanos;
+    private final int maxStepsPerBurst;
+    private final long maxAccumulatedStepNanos;
+    private volatile boolean running;
+    private Thread simulationThread;
     private int stepsThisWindow;
     private int framesThisWindow;
-    private double ticksPerSecond;
-    private double framesPerSecond;
+    private volatile double ticksPerSecond;
+    private volatile double framesPerSecond;
 
     VisualizerModel(Scenario scenario, IPBSolver solver, String solverName) {
       this.scenario = scenario;
       this.solverName = solverName;
       this.network = new FixedStepNetwork(solver, scenario.timeStep());
       scenario.build(new CircuitBuilder(network));
+      this.stepNanos = Math.max(1L, Math.round(scenario.timeStep() * 1_000_000_000.0));
+      this.maxStepsPerBurst = Math.max(1, (int) Math.ceil((TIMER_MS / 1000.0) / scenario.timeStep()) + 1);
+      this.maxAccumulatedStepNanos = stepNanos * maxStepsPerBurst;
       this.traces = List.copyOf(scenario.traces());
       this.readouts = List.copyOf(scenario.readouts());
       this.histories = new ArrayList<>(traces.size());
@@ -172,13 +183,18 @@ public final class CircuitVisualizer {
     }
 
     void start(JFrame frame) {
+      running = true;
+      simulationThread = new Thread(() -> runSimulationLoop(frame), scenario.title().replace(' ', '-') + "-sim");
+      simulationThread.setDaemon(true);
+      simulationThread.start();
       Timer timer = new Timer(TIMER_MS, event -> {
         if (!frame.isDisplayable()) {
+          running = false;
+          if (simulationThread != null) {
+            simulationThread.interrupt();
+          }
           ((Timer) event.getSource()).stop();
           return;
-        }
-        for (int i = 0; i < SUBSTEPS_PER_FRAME; i++) {
-          step();
         }
         recordFrame();
         frame.repaint();
@@ -186,20 +202,45 @@ public final class CircuitVisualizer {
       timer.start();
     }
 
-    private void step() {
-      time += scenario.timeStep();
-      scenario.beforeStep(time);
-      network.physTick();
-      scenario.afterStep(time, network);
-      for (int i = 0; i < traces.size(); i++) {
-        Deque<Double> history = histories.get(i);
-        history.addLast(traces.get(i).value().getAsDouble());
-        while (history.size() > HISTORY) {
-          history.removeFirst();
+    private void runSimulationLoop(JFrame frame) {
+      long lastNanos = System.nanoTime();
+      long accumulatedNanos = 0L;
+      while (running && frame.isDisplayable()) {
+        long now = System.nanoTime();
+        accumulatedNanos = Math.min(accumulatedNanos + Math.max(0L, now - lastNanos), maxAccumulatedStepNanos);
+        lastNanos = now;
+
+        int executed = 0;
+        while (executed < maxStepsPerBurst && accumulatedNanos >= stepNanos) {
+          step();
+          accumulatedNanos -= stepNanos;
+          executed++;
+        }
+
+        if (accumulatedNanos < stepNanos) {
+          LockSupport.parkNanos(Math.min(stepNanos - accumulatedNanos, 1_000_000L));
+        } else {
+          Thread.yield();
         }
       }
-      stepsThisWindow++;
-      updateStatsIfNeeded();
+    }
+
+    private void step() {
+      synchronized (stateLock) {
+        time += scenario.timeStep();
+        scenario.beforeStep(time);
+        network.physTick();
+        scenario.afterStep(time, network);
+        for (int i = 0; i < traces.size(); i++) {
+          Deque<Double> history = histories.get(i);
+          history.addLast(traces.get(i).value().getAsDouble());
+          while (history.size() > HISTORY) {
+            history.removeFirst();
+          }
+        }
+        stepsThisWindow++;
+        updateStatsIfNeeded();
+      }
     }
 
     double ticksPerSecond() {
@@ -220,6 +261,10 @@ public final class CircuitVisualizer {
 
     double framesPerSecond() {
       return framesPerSecond;
+    }
+
+    Object stateLock() {
+      return stateLock;
     }
 
     private void recordFrame() {
@@ -259,25 +304,27 @@ public final class CircuitVisualizer {
       g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
       g.setFont(LABEL_FONT);
 
-      g.setColor(new Color(226, 230, 236));
-      g.drawString("Solver: " + model.solverName, 36, 32);
-      g.drawString(String.format("dt: %.5f s", model.scenario.timeStep()), 36, 56);
-      g.drawString(String.format("TPS: %.1f", model.ticksPerSecond()), 160, 32);
-      g.drawString(String.format("FPS: %.1f", model.framesPerSecond()), 160, 56);
-      g.drawString(String.format("Ideal TPS: %.1f", model.idealTicksPerSecond()), 36, 84);
-      g.drawString(String.format("Slowdown: %.2fx", model.slowdownFactor()), 160, 84);
+      synchronized (model.stateLock()) {
+        g.setColor(new Color(226, 230, 236));
+        g.drawString("Solver: " + model.solverName, 36, 32);
+        g.drawString(String.format("dt: %.5f s", model.scenario.timeStep()), 36, 56);
+        g.drawString(String.format("TPS: %.1f", model.ticksPerSecond()), 160, 32);
+        g.drawString(String.format("FPS: %.1f", model.framesPerSecond()), 160, 56);
+        g.drawString(String.format("Ideal TPS: %.1f", model.idealTicksPerSecond()), 36, 84);
+        g.drawString(String.format("Slowdown: %.2fx", model.slowdownFactor()), 160, 84);
 
-      for (int i = 0; i < model.readouts.size(); i++) {
-        Readout r = model.readouts.get(i);
-        int col = 1 + i / 2;
-        int row = i % 2;
-        int x = 36 + col * 240;
-        int y = 32 + row * 24;
-        g.drawString(String.format(r.format(), r.value().getAsDouble()), x, y);
+        for (int i = 0; i < model.readouts.size(); i++) {
+          Readout r = model.readouts.get(i);
+          int col = 1 + i / 2;
+          int row = i % 2;
+          int x = 36 + col * 240;
+          int y = 32 + row * 24;
+          g.drawString(String.format(r.format(), r.value().getAsDouble()), x, y);
+        }
+
+        model.scenario.drawSchematic(g, 70, 120, 1040, 200);
+        drawScope(g, 70, 330, 1020, 360);
       }
-
-      model.scenario.drawSchematic(g, 70, 120, 1040, 200);
-      drawScope(g, 70, 330, 1020, 360);
 
       g.setColor(new Color(226, 230, 236));
       g.drawString("Manual tool. Close the window to stop.", 36, getHeight() - 24);
@@ -298,9 +345,10 @@ public final class CircuitVisualizer {
       }
       g.drawLine(left + 16, midY, left + width - 16, midY);
 
+      double scaleMultiplier = autoScaleMultiplier(model);
       for (int i = 0; i < model.traces.size(); i++) {
         Trace trace = model.traces.get(i);
-        drawTrace(g, model.histories.get(i), left, top, width, height, trace.scale(), trace.color());
+        drawTrace(g, model.histories.get(i), left, top, width, height, trace.scale() * scaleMultiplier, trace.color());
       }
 
       FontMetrics metrics = g.getFontMetrics();
@@ -310,6 +358,8 @@ public final class CircuitVisualizer {
         g.drawString(trace.label(), legendX, top + 26);
         legendX += metrics.stringWidth(trace.label()) + 24;
       }
+      g.setColor(new Color(226, 230, 236));
+      g.drawString(String.format("scale x%.2f", scaleMultiplier), left + width - 160, top + height - 14);
     }
 
     private void drawTrace(Graphics2D g, Deque<Double> trace, int left, int top, int width, int height, double scale, Color color) {
@@ -330,6 +380,17 @@ public final class CircuitVisualizer {
       g.setColor(color);
       g.setStroke(new BasicStroke(2.2f));
       g.drawPolyline(xs, ys, size);
+    }
+
+    private double autoScaleMultiplier(VisualizerModel model) {
+      double peak = AUTO_SCALE_MIN;
+      for (int i = 0; i < model.traces.size(); i++) {
+        Trace trace = model.traces.get(i);
+        for (double value : model.histories.get(i)) {
+          peak = Math.max(peak, Math.abs(value) / Math.max(trace.scale(), AUTO_SCALE_MIN));
+        }
+      }
+      return Math.max(peak * AUTO_SCALE_HEADROOM, 1.0);
     }
   }
 }

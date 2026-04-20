@@ -21,12 +21,16 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyCacheableNetwork {
   private static final int MIN_DYNAMIC_NONLINEAR_SUBSTEPS = 4;
   private static final int MAX_DYNAMIC_LINEAR_SUBSTEPS = 4;
-  private static final int MAX_DYNAMIC_NONLINEAR_SUBSTEPS = 64;
+  private static final int MAX_DYNAMIC_NONLINEAR_SUBSTEPS = 48;
   private static final double SLEEP_VOLTAGE_DELTA = 1.0e-6;
   private static final double SLEEP_CURRENT_DELTA = 1.0e-8;
-  private static final double NONLINEAR_ITERATIONS_PER_SUBSTEP_INCREASE = 10.0;
+  private static final double NONLINEAR_ITERATIONS_PER_SUBSTEP_INCREASE = 12.0;
   private static final double NONLINEAR_ITERATIONS_PER_SUBSTEP_DECREASE = 4.0;
-  private static final int NONLINEAR_SETTLED_TICKS_TO_DECREASE = 8;
+  private static final double NONLINEAR_HIGH_MOTION_VOLTAGE_DELTA = 0.20;
+  private static final double NONLINEAR_HIGH_MOTION_CURRENT_DELTA = 0.02;
+  private static final double NONLINEAR_LOW_MOTION_VOLTAGE_DELTA = 0.02;
+  private static final double NONLINEAR_LOW_MOTION_CURRENT_DELTA = 0.002;
+  private static final int NONLINEAR_SETTLED_TICKS_TO_DECREASE = 3;
 
   private final @Nullable ServerLevel level;
   private final @Nullable PhysLevel physLevel;
@@ -49,6 +53,7 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
   private long lastWakeFingerprint;
   private int adaptiveDynamicNonlinearSubsteps = MIN_DYNAMIC_NONLINEAR_SUBSTEPS;
   private int lowEffortNonlinearTicks;
+  private int dynamicNonlinearSubstepCeiling = MAX_DYNAMIC_NONLINEAR_SUBSTEPS;
   private int lastRequestedSubsteps = 1;
   private int lastNonlinearIterations;
   private boolean lastIterationLimitHit;
@@ -272,7 +277,7 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
     }
 
     if (mode == PowerNodeSimulationMode.STATIC_LINEAR || !Double.isFinite(suggestedMaxTimeStep) || suggestedMaxTimeStep <= 0.0) {
-      return new SimulationPolicy(mode, 1);
+      return new SimulationPolicy(mode, 1, 1);
     }
 
     double baseTimeStep = getTimeStepSeconds();
@@ -280,13 +285,13 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
     int cappedSubSteps = switch (mode) {
       case DYNAMIC_LINEAR -> Math.min(Math.max(requestedSubSteps, 1), MAX_DYNAMIC_LINEAR_SUBSTEPS);
       case DYNAMIC_NONLINEAR -> {
-        int maxAllowed = Math.min(Math.max(requestedSubSteps, 1), MAX_DYNAMIC_NONLINEAR_SUBSTEPS);
+        int maxAllowed = Math.min(Math.max(requestedSubSteps, 1), dynamicNonlinearSubstepCeiling);
         int target = Math.min(Math.max(adaptiveDynamicNonlinearSubsteps, MIN_DYNAMIC_NONLINEAR_SUBSTEPS), maxAllowed);
         yield Math.max(target, 1);
       }
       default -> 1;
     };
-    return new SimulationPolicy(mode, cappedSubSteps);
+    return new SimulationPolicy(mode, cappedSubSteps, Math.max(requestedSubSteps, 1));
   }
 
   private SolverPhaseDiagnostics.SolveFeedback stepWithoutFeedback(int subSteps) {
@@ -300,29 +305,45 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
   ) {
     if (simulationPolicy.mode != PowerNodeSimulationMode.DYNAMIC_NONLINEAR) {
       adaptiveDynamicNonlinearSubsteps = MIN_DYNAMIC_NONLINEAR_SUBSTEPS;
+      dynamicNonlinearSubstepCeiling = MAX_DYNAMIC_NONLINEAR_SUBSTEPS;
       lowEffortNonlinearTicks = 0;
       return;
     }
 
     int usedSubsteps = Math.max(solveFeedback.substeps(), 1);
     double iterationsPerSubstep = (double) solveFeedback.nonlinearIterations() / usedSubsteps;
+    double voltageDeltaPerSubstep = lastSolveMaxVoltageDelta / usedSubsteps;
+    double currentDeltaPerSubstep = lastSolveMaxCurrentDelta / usedSubsteps;
+    int requestedCeiling = Math.min(Math.max(simulationPolicy.requestedSubSteps, MIN_DYNAMIC_NONLINEAR_SUBSTEPS), MAX_DYNAMIC_NONLINEAR_SUBSTEPS);
+    dynamicNonlinearSubstepCeiling = Math.max(dynamicNonlinearSubstepCeiling, requestedCeiling);
+    boolean highMotion = voltageDeltaPerSubstep >= NONLINEAR_HIGH_MOTION_VOLTAGE_DELTA
+        || currentDeltaPerSubstep >= NONLINEAR_HIGH_MOTION_CURRENT_DELTA;
+    boolean lowMotion = voltageDeltaPerSubstep <= NONLINEAR_LOW_MOTION_VOLTAGE_DELTA
+        && currentDeltaPerSubstep <= NONLINEAR_LOW_MOTION_CURRENT_DELTA;
 
-    if (solveFeedback.iterationLimitHit() || iterationsPerSubstep >= NONLINEAR_ITERATIONS_PER_SUBSTEP_INCREASE) {
-      adaptiveDynamicNonlinearSubsteps = Math.min(adaptiveDynamicNonlinearSubsteps * 2, MAX_DYNAMIC_NONLINEAR_SUBSTEPS);
+    if (solveFeedback.iterationLimitHit()
+        || iterationsPerSubstep >= NONLINEAR_ITERATIONS_PER_SUBSTEP_INCREASE
+        || (highMotion && iterationsPerSubstep >= NONLINEAR_ITERATIONS_PER_SUBSTEP_INCREASE * 0.75)) {
+      int increased = adaptiveDynamicNonlinearSubsteps + Math.max(adaptiveDynamicNonlinearSubsteps / 2, 1);
+      adaptiveDynamicNonlinearSubsteps = Math.min(increased, dynamicNonlinearSubstepCeiling);
       lowEffortNonlinearTicks = 0;
       return;
     }
 
-    boolean settled = lastSolveMaxVoltageDelta <= SLEEP_VOLTAGE_DELTA * 10.0
-        && lastSolveMaxCurrentDelta <= SLEEP_CURRENT_DELTA * 10.0;
-    if (iterationsPerSubstep <= NONLINEAR_ITERATIONS_PER_SUBSTEP_DECREASE && settled) {
+    if (iterationsPerSubstep <= NONLINEAR_ITERATIONS_PER_SUBSTEP_DECREASE && lowMotion) {
       lowEffortNonlinearTicks++;
       if (lowEffortNonlinearTicks >= NONLINEAR_SETTLED_TICKS_TO_DECREASE) {
         adaptiveDynamicNonlinearSubsteps = Math.max(adaptiveDynamicNonlinearSubsteps / 2, MIN_DYNAMIC_NONLINEAR_SUBSTEPS);
+        dynamicNonlinearSubstepCeiling = Math.max(adaptiveDynamicNonlinearSubsteps, requestedCeiling);
         lowEffortNonlinearTicks = 0;
       }
     } else {
       lowEffortNonlinearTicks = 0;
+      if (!solveFeedback.iterationLimitHit()
+          && iterationsPerSubstep < NONLINEAR_ITERATIONS_PER_SUBSTEP_INCREASE * 0.75
+          && !highMotion) {
+        dynamicNonlinearSubstepCeiling = Math.max(requestedCeiling, Math.max(adaptiveDynamicNonlinearSubsteps, MIN_DYNAMIC_NONLINEAR_SUBSTEPS));
+      }
     }
   }
 
@@ -337,7 +358,7 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
 
   private record QueuedChange(BlockPos pos, @Nullable IPowerNode node) {}
   private record ConnectionLookup(org.valkyrienskies.horizons.potato_battery.api.network.Connection connection) {}
-  private record SimulationPolicy(PowerNodeSimulationMode mode, int subSteps) {}
+  private record SimulationPolicy(PowerNodeSimulationMode mode, int subSteps, int requestedSubSteps) {}
 
   private void beginSolveSnapshot() {
     stagingNodeEnergyData.clear();
