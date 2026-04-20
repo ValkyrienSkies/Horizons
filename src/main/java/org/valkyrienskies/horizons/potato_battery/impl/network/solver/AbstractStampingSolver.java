@@ -15,6 +15,14 @@ import java.util.IdentityHashMap;
 import java.util.List;
 
 abstract class AbstractStampingSolver implements IPBSolver {
+  private static final int MAX_NONLINEAR_ITERATIONS = 20;
+  private static final double VOLTAGE_CONVERGENCE = 1.0e-6;
+  private static final double CURRENT_CONVERGENCE = 1.0e-8;
+  private static final double MIN_VOLTAGE_SCALE = 1.0;
+  private static final double MIN_CURRENT_SCALE = 1.0e-3;
+  private static final double MAX_RELATIVE_VOLTAGE_STEP = 1.0;
+  private static final double MAX_RELATIVE_CURRENT_STEP = 2.0;
+
   @Override
   public void step(IPowerNetwork<?> network, int subSteps) {
     Collection<IPowerNode> nodes = network.getNodes();
@@ -31,20 +39,8 @@ abstract class AbstractStampingSolver implements IPBSolver {
       return;
     }
 
-    MatrixAccumulator matrix = new MatrixAccumulator(topology.totalUnknowns);
-    double[] rhs = new double[topology.totalUnknowns];
-
-    for (Branch branch : topology.branches) {
-      double resistance = Math.max(branch.resistance, 1.0e-12);
-      stampConductance(matrix, branch.aEquation, branch.bEquation, 1.0 / resistance);
-    }
-
-    for (NodeTopology nodeTopology : topology.nodeTopologies) {
-      nodeTopology.node.stamp(new StampContextImpl(network, nodeTopology, matrix, rhs, timeStep));
-    }
-
     network.clearNodeEnergyData();
-    double[] solution = solveLinearSystem(matrix, rhs.clone());
+    double[] solution = solveNonlinearSystem(network, topology, timeStep);
     if (solution == null) {
       writeBackWithoutSolve(network, topology);
       return;
@@ -54,6 +50,110 @@ abstract class AbstractStampingSolver implements IPBSolver {
   }
 
   protected abstract double[] solveLinearSystem(MatrixAccumulator matrix, double[] rhs);
+
+  private double[] solveNonlinearSystem(IPowerNetwork<?> network, SolveTopology topology, double timeStep) {
+    double[] guess = createInitialGuess(network, topology);
+
+    for (int iteration = 0; iteration < MAX_NONLINEAR_ITERATIONS; iteration++) {
+      MatrixAccumulator matrix = new MatrixAccumulator(topology.totalUnknowns);
+      double[] rhs = new double[topology.totalUnknowns];
+
+      for (Branch branch : topology.branches) {
+        double resistance = Math.max(branch.resistance, 1.0e-12);
+        stampConductance(matrix, branch.aEquation, branch.bEquation, 1.0 / resistance);
+      }
+
+      for (NodeTopology nodeTopology : topology.nodeTopologies) {
+        nodeTopology.node.stamp(new StampContextImpl(nodeTopology, matrix, rhs, timeStep, guess));
+      }
+
+      double[] candidate = solveLinearSystem(matrix, rhs.clone());
+      if (candidate == null || !isFinite(candidate)) {
+        return null;
+      }
+
+      double maxVoltageDelta = 0.0;
+      double maxCurrentDelta = 0.0;
+      for (NodeTopology nodeTopology : topology.nodeTopologies) {
+        for (int equation : nodeTopology.portEquations) {
+          maxVoltageDelta = Math.max(maxVoltageDelta, Math.abs(candidate[equation] - guess[equation]));
+        }
+        for (int sourceIndex = 0; sourceIndex < nodeTopology.sourceCount; sourceIndex++) {
+          int equation = nodeTopology.sourceEquationBase + sourceIndex;
+          maxCurrentDelta = Math.max(maxCurrentDelta, Math.abs(candidate[equation] - guess[equation]));
+        }
+      }
+
+      if (maxVoltageDelta <= VOLTAGE_CONVERGENCE && maxCurrentDelta <= CURRENT_CONVERGENCE) {
+        return candidate;
+      }
+
+      guess = dampStep(guess, candidate, topology);
+    }
+
+    return guess;
+  }
+
+  private static double[] createInitialGuess(IPowerNetwork<?> network, SolveTopology topology) {
+    double[] guess = new double[topology.totalUnknowns];
+    for (NodeTopology nodeTopology : topology.nodeTopologies) {
+      for (int port = 0; port < nodeTopology.portEquations.length; port++) {
+        guess[nodeTopology.portEquations[port]] = network.getVoltageAt(nodeTopology.node, port);
+      }
+    }
+    return guess;
+  }
+
+  private static boolean isFinite(double[] vector) {
+    for (double value : vector) {
+      if (!Double.isFinite(value)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static double[] dampStep(double[] previous, double[] candidate, SolveTopology topology) {
+    double damping = 1.0;
+    for (NodeTopology nodeTopology : topology.nodeTopologies) {
+      for (int equation : nodeTopology.portEquations) {
+        damping = Math.min(
+            damping,
+            relativeStepLimit(previous[equation], candidate[equation], MIN_VOLTAGE_SCALE, MAX_RELATIVE_VOLTAGE_STEP)
+        );
+      }
+      for (int sourceIndex = 0; sourceIndex < nodeTopology.sourceCount; sourceIndex++) {
+        int equation = nodeTopology.sourceEquationBase + sourceIndex;
+        damping = Math.min(
+            damping,
+            relativeStepLimit(previous[equation], candidate[equation], MIN_CURRENT_SCALE, MAX_RELATIVE_CURRENT_STEP)
+        );
+      }
+    }
+
+    if (damping >= 1.0) {
+      return candidate;
+    }
+
+    double[] damped = candidate.clone();
+    for (int equation = 0; equation < damped.length; equation++) {
+      damped[equation] = previous[equation] + (candidate[equation] - previous[equation]) * damping;
+    }
+    return damped;
+  }
+
+  private static double relativeStepLimit(double previousValue, double candidateValue, double minimumScale, double relativeLimit) {
+    double delta = Math.abs(candidateValue - previousValue);
+    if (delta <= 0.0) {
+      return 1.0;
+    }
+    double scale = Math.max(Math.abs(previousValue), minimumScale);
+    double allowedDelta = scale * relativeLimit;
+    if (delta <= allowedDelta) {
+      return 1.0;
+    }
+    return allowedDelta / delta;
+  }
 
   private static void writeBackWithoutSolve(IPowerNetwork<?> network, SolveTopology topology) {
     for (NodeTopology nodeTopology : topology.nodeTopologies) {
@@ -162,18 +262,18 @@ abstract class AbstractStampingSolver implements IPBSolver {
   private record MatrixEntry(int row, int column, double value) {}
 
   private static final class StampContextImpl implements CircuitStampContext {
-    private final IPowerNetwork<?> network;
     private final NodeTopology topology;
     private final MatrixAccumulator matrix;
     private final double[] rhs;
     private final double timeStep;
+    private final double[] stateVector;
 
-    private StampContextImpl(IPowerNetwork<?> network, NodeTopology topology, MatrixAccumulator matrix, double[] rhs, double timeStep) {
-      this.network = network;
+    private StampContextImpl(NodeTopology topology, MatrixAccumulator matrix, double[] rhs, double timeStep, double[] stateVector) {
       this.topology = topology;
       this.matrix = matrix;
       this.rhs = rhs;
       this.timeStep = timeStep;
+      this.stateVector = stateVector;
     }
 
     @Override
@@ -183,12 +283,15 @@ abstract class AbstractStampingSolver implements IPBSolver {
 
     @Override
     public double getPreviousVoltage(int port) {
-      return network.getVoltageAt(topology.node, port);
+      return voltageForEquation(stateVector, equationForPort(port));
     }
 
     @Override
     public double getPreviousSourceCurrent(int sourceIndex) {
-      return 0.0;
+      if (sourceIndex < 0 || sourceIndex >= topology.sourceCount) {
+        throw new IllegalArgumentException("Invalid voltage source index " + sourceIndex);
+      }
+      return stateVector[topology.sourceEquationBase + sourceIndex];
     }
 
     @Override
