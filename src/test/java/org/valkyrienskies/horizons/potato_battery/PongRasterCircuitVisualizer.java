@@ -25,6 +25,10 @@ import java.util.List;
 public final class PongRasterCircuitVisualizer {
   private static final double V = 5.0, DT = 1.0 / 240.0, PH = 0.17, PM = 0.06, BS = 0.024, VX0 = 0.55, VY0 = 0.35, PS = 1.25, SERVE = 0.65;
   private static final int WIN = 11, HX = 64, VY = 48, AUDIO_RATE = 24000;
+  private static final double AUDIO_MAX_VOLTS = 1.25;
+  private static final double AUDIO_MAX_NORMALIZED = 0.28;
+  private static final double AUDIO_MAX_SLEW_PER_SAMPLE = 0.05;
+  private static final double AUDIO_LOWPASS_ALPHA = 0.18;
   private PongRasterCircuitVisualizer() {}
   public static void main(String[] args) { CircuitVisualizer.launch(new Scene()); }
   private static double c01(double v) { return Math.max(0.0, Math.min(1.0, v)); }
@@ -351,12 +355,18 @@ public final class PongRasterCircuitVisualizer {
   private static final class AudioMixNode extends PowerNode {
     private double out; private AudioMixNode() { super(3); }
     @Override public PowerNodeSimulationMode getSimulationMode() { return PowerNodeSimulationMode.DYNAMIC_LINEAR; }
-    @Override public void onSubstepComplete(IPowerNetwork<?> n, double dt) { out = Math.max(-V, Math.min(V, n.getVoltageAt(this,0) + n.getVoltageAt(this,1) + n.getVoltageAt(this,2))); }
+    @Override public void onSubstepComplete(IPowerNetwork<?> n, double dt) {
+      double mixed = n.getVoltageAt(this,0) + n.getVoltageAt(this,1) + n.getVoltageAt(this,2);
+      if (!Double.isFinite(mixed)) mixed = 0.0;
+      out = Math.max(-AUDIO_MAX_VOLTS, Math.min(AUDIO_MAX_VOLTS, mixed));
+    }
     double level() { return out; }
   }
   private static final class AudioSink {
     private final SourceDataLine line;
     private final byte[] frame;
+    private double filteredSample;
+    private double limitedSample;
     private AudioSink() {
       SourceDataLine opened = null;
       try {
@@ -371,8 +381,16 @@ public final class PongRasterCircuitVisualizer {
     }
     void push(double level) {
       if (line == null) return;
-      short sample = (short)Math.max(Short.MIN_VALUE, Math.min(Short.MAX_VALUE, level / V * 12000.0));
+      double normalized = Double.isFinite(level) ? level / AUDIO_MAX_VOLTS : 0.0;
+      normalized = Math.max(-1.0, Math.min(1.0, normalized));
       for (int i = 0; i < frame.length; i += 2) {
+        filteredSample += (normalized - filteredSample) * AUDIO_LOWPASS_ALPHA;
+        double delta = filteredSample - limitedSample;
+        if (delta > AUDIO_MAX_SLEW_PER_SAMPLE) delta = AUDIO_MAX_SLEW_PER_SAMPLE;
+        else if (delta < -AUDIO_MAX_SLEW_PER_SAMPLE) delta = -AUDIO_MAX_SLEW_PER_SAMPLE;
+        limitedSample += delta;
+        double clipped = Math.tanh(limitedSample * 1.4) * AUDIO_MAX_NORMALIZED;
+        short sample = (short)Math.max(Short.MIN_VALUE, Math.min(Short.MAX_VALUE, clipped * Short.MAX_VALUE));
         frame[i] = (byte)(sample & 0xFF);
         frame[i + 1] = (byte)((sample >>> 8) & 0xFF);
       }
@@ -380,6 +398,8 @@ public final class PongRasterCircuitVisualizer {
     }
     void reset() {
       if (line != null) line.flush();
+      filteredSample = 0.0;
+      limitedSample = 0.0;
     }
   }
 }
