@@ -1,7 +1,9 @@
 package org.valkyrienskies.horizons.potato_battery.impl.network.node;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork;
 import org.valkyrienskies.horizons.potato_battery.api.network.Connection;
+import org.valkyrienskies.horizons.potato_battery.api.network.node.PowerNodeSimulationMode;
 import org.valkyrienskies.horizons.potato_battery.api.network.node.IPowerNode;
 
 import javax.annotation.Nullable;
@@ -102,6 +104,20 @@ public abstract class PowerNode implements IPowerNode {
 
   @Override
   public void stamp(org.valkyrienskies.horizons.potato_battery.api.network.CircuitStampContext context) {
+  }
+
+  @Override
+  public PowerNodeSimulationMode getSimulationMode() {
+    return PowerNodeSimulationMode.STATIC_LINEAR;
+  }
+
+  @Override
+  public double getSuggestedMaxTimeStepSeconds() {
+    return Double.POSITIVE_INFINITY;
+  }
+
+  @Override
+  public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
   }
 
   @Override

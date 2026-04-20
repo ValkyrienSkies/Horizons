@@ -228,3 +228,13 @@ tasks.register("runAstableMultivibratorVisualizer", JavaExec) {
     def solverName = (project.findProperty("powerSolver") ?: "jklu").toString()
     systemProperty "power.solver", solverName
 }
+
+tasks.register("runTransistorDiagnostics", JavaExec) {
+    group = "verification"
+    description = "Sweep transistor operating points and write CSV diagnostics"
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "org.valkyrienskies.horizons.potato_battery.TransistorDiagnostics"
+
+    def solverName = (project.findProperty("powerSolver") ?: "all").toString()
+    systemProperty "power.solver", solverName
+}

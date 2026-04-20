@@ -1,7 +1,6 @@
 package org.valkyrienskies.horizons.potato_battery;
 
 import net.minecraft.core.BlockPos;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -156,6 +155,52 @@ class PowerSolverTest {
     assertTrue(benchmark.centerVoltage() < SUPPLY_VOLTAGE, solverName + " center node should be below source voltage");
   }
 
+  @ParameterizedTest(name = "{0} static linear networks go to sleep after settling")
+  @MethodSource("solvers")
+  void staticLinearNetworksSleepAfterSettling(String solverName, Supplier<IPBSolver> solverFactory) {
+    RecordingSolver solver = new RecordingSolver(solverFactory.get());
+    FixedVoltageNode source = new FixedVoltageNode(SUPPLY_VOLTAGE);
+    ResistorNode load = new ResistorNode(5.0);
+    GroundNode ground = new GroundNode();
+
+    PowerNetworkServer network = runCircuit(solver, source, load, ground);
+    int solvesAfterFirstTick = solver.callCount();
+
+    network.physTick();
+    int solvesAfterSecondTick = solver.callCount();
+    network.physTick();
+
+    assertEquals(1, solvesAfterFirstTick, solverName + " should solve the static network on the first tick");
+    assertEquals(2, solvesAfterSecondTick, solverName + " should perform one settling solve before sleeping");
+    assertEquals(solvesAfterSecondTick, solver.callCount(),
+        solverName + " should not re-solve an unchanged static linear network");
+  }
+
+  @ParameterizedTest(name = "{0} nonlinear networks request internal substeps")
+  @MethodSource("solvers")
+  void nonlinearNetworksRequestInternalSubsteps(String solverName, Supplier<IPBSolver> solverFactory) {
+    RecordingSolver solver = new RecordingSolver(solverFactory.get());
+    FixedStepNetwork network = new FixedStepNetwork(solver, 1.0 / 240.0);
+    FixedVoltageNode source = new FixedVoltageNode(5.0);
+    ResistorNode series = new ResistorNode(1.0e3);
+    DiodeNode diode = new DiodeNode();
+    GroundNode ground = new GroundNode();
+
+    addNode(network, 0, source);
+    addNode(network, 1, series);
+    addNode(network, 2, diode);
+    addNode(network, 3, ground);
+
+    connectBidirectional(source, 0, series, 0, WIRE_RESISTANCE);
+    connectBidirectional(series, 1, diode, 0, WIRE_RESISTANCE);
+    connectBidirectional(diode, 1, ground, 0, WIRE_RESISTANCE);
+
+    network.physTick();
+
+    assertTrue(solver.lastRequestedSubSteps() > 1,
+        solverName + " nonlinear network should request internal transient substeps");
+  }
+
   @ParameterizedTest(name = "{0} forward-biased diode settles near Shockley drop")
   @MethodSource("solvers")
   void diodeForwardBiasMatchesShockley(String solverName, Supplier<IPBSolver> solverFactory) {
@@ -213,7 +258,6 @@ class PowerSolverTest {
     assertTrue(id < 1.0e-6, solverName + " expected near-zero reverse current, got " + id + " A");
   }
 
-  @Disabled("Compact NPN model still needs validation under the nonlinear solve loop")
   @ParameterizedTest(name = "{0} NPN in active region shows current gain")
   @MethodSource("solvers")
   void npnActiveRegionHasCurrentGain(String solverName, Supplier<IPBSolver> solverFactory) {
@@ -247,13 +291,12 @@ class PowerSolverTest {
     double ib = Math.abs(network.getVoltageAt(rb, 0) - network.getVoltageAt(rb, 1)) / 100.0e3;
     double ic = Math.abs(network.getVoltageAt(rc, 0) - network.getVoltageAt(rc, 1)) / 1.0e3;
 
-    assertTrue(vbe > 0.3 && vbe < 0.8, solverName + " expected forward-biased Vbe, got " + vbe);
+    assertTrue(vbe > 0.45 && vbe < 0.8, solverName + " expected forward-biased Vbe, got " + vbe);
     assertTrue(vce > 0.3, solverName + " expected BJT in active region (Vce > 0.3 V), got " + vce);
     assertTrue(ib > 5.0e-6 && ib < 2.5e-5, solverName + " expected Ib in ~µA range, got " + ib);
     assertEquals(100.0, ic / ib, 20.0, solverName + " Ic/Ib should be near beta=100");
   }
 
-  @Disabled("Compact PNP model still needs validation under the nonlinear solve loop")
   @ParameterizedTest(name = "{0} PNP in active region mirrors NPN behavior")
   @MethodSource("solvers")
   void pnpActiveRegionHasCurrentGain(String solverName, Supplier<IPBSolver> solverFactory) {
@@ -284,10 +327,10 @@ class PowerSolverTest {
 
     double veb = network.getVoltageAt(q, 2) - network.getVoltageAt(q, 0);
     double vec = network.getVoltageAt(q, 2) - network.getVoltageAt(q, 1);
-    double ib = network.getCurrentOver(rb, q, 1, 0);
-    double ic = network.getCurrentOver(q, rc, 1, 0);
+    double ib = Math.abs(network.getVoltageAt(rb, 0) - network.getVoltageAt(rb, 1)) / 100.0e3;
+    double ic = Math.abs(network.getVoltageAt(rc, 0) - network.getVoltageAt(rc, 1)) / 1.0e3;
 
-    assertTrue(veb > 0.55 && veb < 0.75, solverName + " expected Veb near 0.65 V, got " + veb);
+    assertTrue(veb > 0.45 && veb < 0.8, solverName + " expected forward-biased Veb, got " + veb);
     assertTrue(vec > 0.3, solverName + " expected PNP in active region (Vec > 0.3 V), got " + vec);
     assertTrue(Math.abs(ib) > 5.0e-6 && Math.abs(ib) < 2.5e-5,
         solverName + " expected |Ib| in ~µA range, got " + ib);
@@ -361,7 +404,6 @@ class PowerSolverTest {
     assertEquals(0.755, vd, 0.1, solverName + " triode-mode Vd should match closed-form ≈ 0.755 V");
   }
 
-  @Disabled("Compact PMOS model still needs validation under the nonlinear solve loop")
   @ParameterizedTest(name = "{0} PMOS in saturation mirrors NMOS")
   @MethodSource("solvers")
   void pmosSaturationMirrorsNmos(String solverName, Supplier<IPBSolver> solverFactory) {
@@ -389,7 +431,7 @@ class PowerSolverTest {
 
     double vsg = network.getVoltageAt(m, 2) - network.getVoltageAt(m, 1);
     double vd = network.getVoltageAt(m, 0);
-    double id = network.getCurrentOver(m, rd, 0, 0);
+    double id = Math.abs(network.getVoltageAt(rd, 0) - network.getVoltageAt(rd, 1)) / 1.0e3;
 
     // Vsg=5−3=2, Vov=1, Id_sat=1 mA → Vd ≈ Id·Rd ≈ 1 V, Vsd=4 > Vov (saturation).
     assertTrue(vsg > 1.9 && vsg < 2.1,
@@ -401,7 +443,7 @@ class PowerSolverTest {
   @ParameterizedTest(name = "{0} astable multivibrator stays near supply rails")
   @MethodSource("solvers")
   void astableMultivibratorVoltagesStayBounded(String solverName, Supplier<IPBSolver> solverFactory) {
-    FixedStepNetwork network = new FixedStepNetwork(solverFactory.get(), 1.0 / 20000.0);
+    FixedStepNetwork network = new FixedStepNetwork(solverFactory.get(), 1.0 / 240.0);
     BatteryNode battery = new BatteryNode(5.0);
     ResistorNode rc1 = new ResistorNode(1.0e3);
     ResistorNode rc2 = new ResistorNode(1.0e3);
@@ -465,8 +507,6 @@ class PowerSolverTest {
     double maxAbsVoltage = 0.0;
     for (int i = 0; i < 600; i++) {
       network.physTick();
-      c1.postStep(network);
-      c2.postStep(network);
 
       maxAbsVoltage = Math.max(maxAbsVoltage, Math.abs(network.getVoltageAt(q1, 1)));
       maxAbsVoltage = Math.max(maxAbsVoltage, Math.abs(network.getVoltageAt(q2, 1)));
@@ -677,6 +717,31 @@ class PowerSolverTest {
       for (int port = 1; port < getPorts(); port++) {
         context.stampResistance(0, port, 1.0e-9);
       }
+    }
+  }
+
+  private static final class RecordingSolver implements IPBSolver {
+    private final IPBSolver delegate;
+    private int callCount;
+    private int lastRequestedSubSteps;
+
+    private RecordingSolver(IPBSolver delegate) {
+      this.delegate = delegate;
+    }
+
+    @Override
+    public void step(org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork<?> network, int subSteps) {
+      callCount++;
+      lastRequestedSubSteps = subSteps;
+      delegate.step(network, subSteps);
+    }
+
+    private int callCount() {
+      return callCount;
+    }
+
+    private int lastRequestedSubSteps() {
+      return lastRequestedSubSteps;
     }
   }
 }

@@ -66,8 +66,6 @@ public final class RLCCircuitVisualizer {
       loopCurrent = network.getCurrentOver(source, resistor, 0, 0);
       capacitorVoltage = network.getVoltageAt(capacitor, 0) - network.getVoltageAt(capacitor, 1);
       inductorVoltage = network.getVoltageAt(inductor, 0) - network.getVoltageAt(inductor, 1);
-      inductor.postStep(network);
-      capacitor.postStep(network);
     }
 
     @Override

@@ -1,5 +1,6 @@
 package org.valkyrienskies.horizons.potato_battery.api.network.node;
 
+import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork;
 import org.valkyrienskies.horizons.potato_battery.api.network.Connection;
 import org.valkyrienskies.horizons.potato_battery.api.network.CircuitStampContext;
 
@@ -98,6 +99,17 @@ public interface IPowerNode {
   int getVoltageSourceCount();
 
   void stamp(CircuitStampContext context);
+
+  default PowerNodeSimulationMode getSimulationMode() {
+    return PowerNodeSimulationMode.STATIC_LINEAR;
+  }
+
+  default double getSuggestedMaxTimeStepSeconds() {
+    return Double.POSITIVE_INFINITY;
+  }
+
+  default void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+  }
 
 
   //EVENTS

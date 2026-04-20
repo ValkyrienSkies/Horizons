@@ -102,8 +102,6 @@ public final class AstableMultivibratorVisualizer {
       vc2 = network.getVoltageAt(q2, 1);
       vb1 = network.getVoltageAt(q1, 0);
       vb2 = network.getVoltageAt(q2, 0);
-      c1.postStep(network);
-      c2.postStep(network);
     }
 
     @Override

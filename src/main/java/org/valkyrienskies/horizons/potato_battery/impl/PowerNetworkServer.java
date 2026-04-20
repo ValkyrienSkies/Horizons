@@ -8,6 +8,7 @@ import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork;
 import org.valkyrienskies.horizons.potato_battery.api.network.IPBSolver;
 import org.valkyrienskies.horizons.potato_battery.api.network.NodeEnergyData;
 import org.valkyrienskies.horizons.potato_battery.api.network.node.IPowerNode;
+import org.valkyrienskies.horizons.potato_battery.api.network.node.PowerNodeSimulationMode;
 import org.valkyrienskies.horizons.potato_battery.impl.network.solver.JKLUSolver;
 
 import javax.annotation.Nullable;
@@ -16,6 +17,11 @@ import java.util.HashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class PowerNetworkServer implements IPowerNetwork<ServerLevel> {
+  private static final int MAX_DYNAMIC_LINEAR_SUBSTEPS = 4;
+  private static final int MAX_DYNAMIC_NONLINEAR_SUBSTEPS = 64;
+  private static final double SLEEP_VOLTAGE_DELTA = 1.0e-6;
+  private static final double SLEEP_CURRENT_DELTA = 1.0e-8;
+
   private final @Nullable ServerLevel level;
   private final @Nullable PhysLevel physLevel;
 
@@ -26,6 +32,10 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel> {
   private final HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> nodeEnergyData = new HashMap<>();
 
   private final ConcurrentLinkedQueue<QueuedChange> updateQueue = new ConcurrentLinkedQueue<>();
+  private boolean topologyDirty = true;
+  private boolean sleeping;
+  private double lastSolveMaxVoltageDelta;
+  private double lastSolveMaxCurrentDelta;
 
   public PowerNetworkServer(@Nullable ServerLevel level, @Nullable PhysLevel physLevel) {
     this(level, physLevel, new JKLUSolver());
@@ -81,6 +91,7 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel> {
 
   @Override
   public void physTick() {
+    boolean hadQueuedChanges = !updateQueue.isEmpty();
     updateQueue.forEach(change -> {
       if (change.node == null) {
         IPowerNode removed = nodes.remove(change.pos.asLong());
@@ -96,8 +107,29 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel> {
     });
 
     updateQueue.clear();
+    if (hadQueuedChanges) {
+      topologyDirty = true;
+      sleeping = false;
+    }
 
-    this.solver.step(this, 1);
+    SimulationPolicy simulationPolicy = classifySimulationPolicy();
+    if (sleeping && !topologyDirty && simulationPolicy.mode == PowerNodeSimulationMode.STATIC_LINEAR) {
+      return;
+    }
+
+    lastSolveMaxVoltageDelta = 0.0;
+    lastSolveMaxCurrentDelta = 0.0;
+    this.solver.step(this, simulationPolicy.subSteps);
+
+    if (simulationPolicy.mode == PowerNodeSimulationMode.STATIC_LINEAR
+        && lastSolveMaxVoltageDelta <= SLEEP_VOLTAGE_DELTA
+        && lastSolveMaxCurrentDelta <= SLEEP_CURRENT_DELTA) {
+      sleeping = true;
+    } else {
+      sleeping = false;
+    }
+
+    topologyDirty = false;
   }
 
   @Override
@@ -136,7 +168,13 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel> {
 
   @Override
   public void setNodeEnergyData(IPowerNode node, int port, NodeEnergyData energyData) {
-    nodeEnergyData.computeIfAbsent(node, ignored -> new Long2ObjectOpenHashMap<>(node.getPorts())).put(port, energyData);
+    Long2ObjectOpenHashMap<NodeEnergyData> portMap = nodeEnergyData.computeIfAbsent(node, ignored -> new Long2ObjectOpenHashMap<>(node.getPorts()));
+    NodeEnergyData previous = portMap.get(port);
+    if (previous != null) {
+      lastSolveMaxVoltageDelta = Math.max(lastSolveMaxVoltageDelta, Math.abs(previous.getVoltage() - energyData.getVoltage()));
+      lastSolveMaxCurrentDelta = Math.max(lastSolveMaxCurrentDelta, Math.abs(previous.getCurrent() - energyData.getCurrent()));
+    }
+    portMap.put(port, energyData);
   }
 
   @Override
@@ -163,6 +201,33 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel> {
     return null;
   }
 
+  private SimulationPolicy classifySimulationPolicy() {
+    PowerNodeSimulationMode mode = PowerNodeSimulationMode.STATIC_LINEAR;
+    double suggestedMaxTimeStep = Double.POSITIVE_INFINITY;
+
+    for (IPowerNode node : nodes.values()) {
+      PowerNodeSimulationMode nodeMode = node.getSimulationMode();
+      if (nodeMode.ordinal() > mode.ordinal()) {
+        mode = nodeMode;
+      }
+      suggestedMaxTimeStep = Math.min(suggestedMaxTimeStep, node.getSuggestedMaxTimeStepSeconds());
+    }
+
+    if (mode == PowerNodeSimulationMode.STATIC_LINEAR || !Double.isFinite(suggestedMaxTimeStep) || suggestedMaxTimeStep <= 0.0) {
+      return new SimulationPolicy(mode, 1);
+    }
+
+    double baseTimeStep = getTimeStepSeconds();
+    int requestedSubSteps = (int) Math.ceil(baseTimeStep / suggestedMaxTimeStep);
+    int cappedSubSteps = switch (mode) {
+      case DYNAMIC_LINEAR -> Math.min(Math.max(requestedSubSteps, 1), MAX_DYNAMIC_LINEAR_SUBSTEPS);
+      case DYNAMIC_NONLINEAR -> Math.min(Math.max(requestedSubSteps, 1), MAX_DYNAMIC_NONLINEAR_SUBSTEPS);
+      default -> 1;
+    };
+    return new SimulationPolicy(mode, cappedSubSteps);
+  }
+
   private record QueuedChange(BlockPos pos, @Nullable IPowerNode node) {}
   private record ConnectionLookup(org.valkyrienskies.horizons.potato_battery.api.network.Connection connection) {}
+  private record SimulationPolicy(PowerNodeSimulationMode mode, int subSteps) {}
 }

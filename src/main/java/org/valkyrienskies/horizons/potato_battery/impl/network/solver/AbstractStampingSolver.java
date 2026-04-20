@@ -11,17 +11,18 @@ import org.valkyrienskies.horizons.potato_battery.api.network.node.IPowerNode;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 
 abstract class AbstractStampingSolver implements IPBSolver {
-  private static final int MAX_NONLINEAR_ITERATIONS = 20;
+  private static final int MAX_NONLINEAR_ITERATIONS = 80;
   private static final double VOLTAGE_CONVERGENCE = 1.0e-6;
   private static final double CURRENT_CONVERGENCE = 1.0e-8;
   private static final double MIN_VOLTAGE_SCALE = 1.0;
   private static final double MIN_CURRENT_SCALE = 1.0e-3;
-  private static final double MAX_RELATIVE_VOLTAGE_STEP = 1.0;
-  private static final double MAX_RELATIVE_CURRENT_STEP = 2.0;
+  private static final double MAX_RELATIVE_VOLTAGE_STEP = 0.75;
+  private static final double MAX_RELATIVE_CURRENT_STEP = 1.5;
 
   @Override
   public void step(IPowerNetwork<?> network, int subSteps) {
@@ -31,22 +32,26 @@ abstract class AbstractStampingSolver implements IPBSolver {
       return;
     }
 
-    double timeStep = network.getTimeStepSeconds() / Math.max(subSteps, 1);
     SolveTopology topology = SolveTopology.build(nodes);
     if (topology.totalUnknowns == 0) {
-      network.clearNodeEnergyData();
       writeBackWithoutSolve(network, topology);
       return;
     }
 
-    network.clearNodeEnergyData();
-    double[] solution = solveNonlinearSystem(network, topology, timeStep);
-    if (solution == null) {
-      writeBackWithoutSolve(network, topology);
-      return;
-    }
+    int steps = Math.max(subSteps, 1);
+    double timeStep = network.getTimeStepSeconds() / steps;
+    for (int subStep = 0; subStep < steps; subStep++) {
+      double[] solution = solveNonlinearSystem(network, topology, timeStep);
+      if (solution == null) {
+        writeBackWithoutSolve(network, topology);
+        return;
+      }
 
-    writeBack(network, topology, solution);
+      writeBack(network, topology, solution);
+      for (NodeTopology nodeTopology : topology.nodeTopologies) {
+        nodeTopology.node.onSubstepComplete(network, timeStep);
+      }
+    }
   }
 
   protected abstract double[] solveLinearSystem(MatrixAccumulator matrix, double[] rhs);
@@ -426,8 +431,7 @@ abstract class AbstractStampingSolver implements IPBSolver {
       }
 
       List<Branch> branches = new ArrayList<>();
-      Long2DoubleOpenHashMap seenBranches = new Long2DoubleOpenHashMap();
-      seenBranches.defaultReturnValue(Double.NaN);
+      HashSet<BranchKey> seenBranches = new HashSet<>();
 
       for (NodeTopology topology : nodeTopologies) {
         int ownerId = nodeIds.get(topology.node);
@@ -438,8 +442,8 @@ abstract class AbstractStampingSolver implements IPBSolver {
               continue;
             }
 
-            long key = canonicalBranchKey(ownerId, ownerPort, otherId, connection.port());
-            if (!Double.isNaN(seenBranches.get(key))) {
+            BranchKey key = canonicalBranchKey(ownerId, ownerPort, otherId, connection.port());
+            if (!seenBranches.add(key)) {
               continue;
             }
 
@@ -453,7 +457,6 @@ abstract class AbstractStampingSolver implements IPBSolver {
                 otherTopology.portEquations[connection.port()],
                 connection.resistance()
             ));
-            seenBranches.put(key, connection.resistance());
           }
         }
       }
@@ -461,12 +464,10 @@ abstract class AbstractStampingSolver implements IPBSolver {
       return new SolveTopology(nodeTopologies, branches, nextEquation);
     }
 
-    private static long canonicalBranchKey(int ownerId, int ownerPort, int otherId, int otherPort) {
+    private static BranchKey canonicalBranchKey(int ownerId, int ownerPort, int otherId, int otherPort) {
       long first = (((long) ownerId) << 32) | (ownerPort & 0xffffffffL);
       long second = (((long) otherId) << 32) | (otherPort & 0xffffffffL);
-      long low = Math.min(first, second);
-      long high = Math.max(first, second);
-      return low ^ Long.rotateLeft(high, 32);
+      return first <= second ? new BranchKey(first, second) : new BranchKey(second, first);
     }
   }
 
@@ -509,4 +510,6 @@ abstract class AbstractStampingSolver implements IPBSolver {
       return (voltageA - voltageB) / Math.max(resistance, 1.0e-12);
     }
   }
+
+  private record BranchKey(long lowEndpoint, long highEndpoint) {}
 }
