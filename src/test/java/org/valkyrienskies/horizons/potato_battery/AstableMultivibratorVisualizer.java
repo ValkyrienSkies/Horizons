@@ -81,7 +81,6 @@ public final class AstableMultivibratorVisualizer {
           .connect(q1, 0, c2, 1)
           .connect(rb2, 1, q2, 0)
           .connect(q2, 0, c1, 1)
-          // External clamp paths for missing reverse Vbe and forward Vbc junctions.
           .connect(q1, 2, q1BaseEmitterReverseClamp, 0)
           .connect(q1BaseEmitterReverseClamp, 1, q1, 0)
           .connect(q2, 2, q2BaseEmitterReverseClamp, 0)
@@ -186,7 +185,7 @@ public final class AstableMultivibratorVisualizer {
       drawCapacitor(g, xR + 12, yCol, xL + 12, yBase, "C2 4.7uF");
 
       g.setColor(rail);
-      g.drawString("Smaller dt and explicit junction clamps keep the toy transistor model bounded.",
+      g.drawString("BJT switching model plus explicit clamp paths keep the oscillator bounded.",
           left + 60, top + height - 8);
     }
 

@@ -1,5 +1,6 @@
 package org.valkyrienskies.horizons.potato_battery;
 
+import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork;
 import org.valkyrienskies.horizons.potato_battery.api.network.CircuitStampContext;
 import org.valkyrienskies.horizons.potato_battery.api.network.IPBSolver;
 import org.valkyrienskies.horizons.potato_battery.api.network.node.PowerNodeSimulationMode;
@@ -9,44 +10,83 @@ import org.valkyrienskies.horizons.potato_battery.impl.network.node.PowerNode;
 public final class CircuitComponents {
   private static final double DYNAMIC_LINEAR_MAX_STEP = 1.0 / 1000.0;
   private static final double DYNAMIC_NONLINEAR_MAX_STEP = 1.0 / 8000.0;
+
   private static final double EXP_LIMIT = 40.0;
-  private static final double MAX_FORWARD_JUNCTION_VOLTAGE = 0.8;
-  private static final double MIN_JUNCTION_CONDUCTANCE = 1.0e-12;
+  private static final double MIN_CONDUCTANCE = 1.0e-12;
+  private static final double JUNCTION_SHUNT_CONDUCTANCE = 1.0e-9;
+  private static final double LEAKAGE_RESISTANCE = 1.0e8;
   private static final double MOS_OFF_CONDUCTANCE = 1.0e-8;
-  private static final double GATE_LEAKAGE = 1.0e-12;
+  private static final double MOS_GATE_LEAKAGE = 1.0e-12;
+  private static final double MOS_CHANNEL_LENGTH_MODULATION = 0.02;
+  private static final double BJT_OUTPUT_CONDUCTANCE = 1.0e-8;
 
-  private CircuitComponents() {}
+  private CircuitComponents() {
+  }
 
-  private record JunctionLinearization(double current, double conductance, double voltage) {}
+  private record JunctionLinearization(double voltage, double current, double conductance) {
+  }
 
-  private static JunctionLinearization linearizeJunction(double voltage, double saturationCurrent, double thermalVoltage) {
-    double limitedVoltage = Math.max(-EXP_LIMIT * thermalVoltage, Math.min(MAX_FORWARD_JUNCTION_VOLTAGE, voltage));
-    double exp = Math.exp(limitedVoltage / thermalVoltage);
-    double current = saturationCurrent * (exp - 1.0);
-    double conductance = Math.max((saturationCurrent / thermalVoltage) * exp, MIN_JUNCTION_CONDUCTANCE);
-    return new JunctionLinearization(current, conductance, limitedVoltage);
+  private static double limitedExponential(double arg) {
+    return Math.exp(Math.max(-EXP_LIMIT, Math.min(EXP_LIMIT, arg)));
+  }
+
+  private static double criticalVoltage(double saturationCurrent, double thermalVoltage) {
+    return thermalVoltage * Math.log(thermalVoltage / (Math.sqrt(2.0) * Math.max(saturationCurrent, 1.0e-30)));
+  }
+
+  private static double limitForwardJunctionVoltage(
+      double proposedVoltage,
+      double previousVoltage,
+      double saturationCurrent,
+      double thermalVoltage
+  ) {
+    double criticalVoltage = criticalVoltage(saturationCurrent, thermalVoltage);
+    if (proposedVoltage <= criticalVoltage || Math.abs(proposedVoltage - previousVoltage) <= 2.0 * thermalVoltage) {
+      return proposedVoltage;
+    }
+    if (previousVoltage > 0.0) {
+      double arg = 1.0 + (proposedVoltage - previousVoltage) / thermalVoltage;
+      if (arg > 0.0) {
+        return previousVoltage + thermalVoltage * Math.log(arg);
+      }
+    }
+    return criticalVoltage;
+  }
+
+  private static JunctionLinearization linearizeJunction(
+      double proposedVoltage,
+      double previousVoltage,
+      double saturationCurrent,
+      double thermalVoltage,
+      double shuntConductance
+  ) {
+    double limitedVoltage = limitForwardJunctionVoltage(proposedVoltage, previousVoltage, saturationCurrent, thermalVoltage);
+    double exp = limitedExponential(limitedVoltage / thermalVoltage);
+    double diodeCurrent = saturationCurrent * (exp - 1.0);
+    double diodeConductance = Math.max((saturationCurrent / thermalVoltage) * exp, MIN_CONDUCTANCE);
+    double totalConductance = diodeConductance + shuntConductance;
+    double totalCurrent = diodeCurrent + shuntConductance * limitedVoltage;
+    return new JunctionLinearization(limitedVoltage, totalCurrent, totalConductance);
   }
 
   private static void stampLinearizedBranch(
       CircuitStampContext context,
-      int fromPort,
-      int toPort,
-      double scale,
+      int positivePort,
+      int negativePort,
       JunctionLinearization linearization
   ) {
-    if (scale == 0.0) {
-      return;
-    }
-    double conductance = scale * linearization.conductance();
-    double current = scale * (linearization.current() - linearization.conductance() * linearization.voltage());
-    context.stampConductance(fromPort, toPort, conductance);
-    context.stampCurrentSource(fromPort, toPort, current);
+    context.stampConductance(positivePort, negativePort, linearization.conductance());
+    context.stampCurrentSource(
+        positivePort,
+        negativePort,
+        linearization.current() - linearization.conductance() * linearization.voltage()
+    );
   }
 
-  private static void stampLinearizedTwoControlCurrent(
+  private static void stampTerminalCurrent(
       CircuitStampContext context,
-      int outPositive,
-      int outNegative,
+      int positivePort,
+      int negativePort,
       int firstControlPositive,
       int firstControlNegative,
       double firstTransconductance,
@@ -56,12 +96,14 @@ public final class CircuitComponents {
       double constantCurrent
   ) {
     if (firstTransconductance != 0.0) {
-      context.stampVCCS(outPositive, outNegative, firstControlPositive, firstControlNegative, firstTransconductance);
+      context.stampVCCS(positivePort, negativePort, firstControlPositive, firstControlNegative, firstTransconductance);
     }
     if (secondTransconductance != 0.0) {
-      context.stampVCCS(outPositive, outNegative, secondControlPositive, secondControlNegative, secondTransconductance);
+      context.stampVCCS(positivePort, negativePort, secondControlPositive, secondControlNegative, secondTransconductance);
     }
-    context.stampCurrentSource(outPositive, outNegative, constantCurrent);
+    if (constantCurrent != 0.0) {
+      context.stampCurrentSource(positivePort, negativePort, constantCurrent);
+    }
   }
 
   public static final class FixedStepNetwork extends PowerNetworkServer {
@@ -163,7 +205,6 @@ public final class CircuitComponents {
   }
 
   public static final class CapacitorNode extends PowerNode {
-    private static final double LEAKAGE_RESISTANCE = 1.0e8;
     private final double capacitance;
     private double previousVoltage;
 
@@ -174,14 +215,10 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      double conductance = capacitance / context.getTimeStep();
-      context.stampConductance(0, 1, conductance);
-      context.stampCurrentSource(1, 0, conductance * previousVoltage);
+      double companionConductance = Math.max(capacitance / context.getTimeStep(), MIN_CONDUCTANCE);
+      context.stampConductance(0, 1, companionConductance);
+      context.stampCurrentSource(1, 0, companionConductance * previousVoltage);
       context.stampResistance(0, 1, LEAKAGE_RESISTANCE);
-    }
-
-    public void postStep(PowerNetworkServer network) {
-      previousVoltage = network.getVoltageAt(this, 0) - network.getVoltageAt(this, 1);
     }
 
     @Override
@@ -195,7 +232,7 @@ public final class CircuitComponents {
     }
 
     @Override
-    public void onSubstepComplete(org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork<?> network, double timeStepSeconds) {
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
       previousVoltage = network.getVoltageAt(this, 0) - network.getVoltageAt(this, 1);
     }
 
@@ -216,14 +253,9 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      double conductance = context.getTimeStep() / inductance;
-      context.stampConductance(0, 1, conductance);
+      double companionConductance = Math.max(context.getTimeStep() / Math.max(inductance, 1.0e-18), MIN_CONDUCTANCE);
+      context.stampConductance(0, 1, companionConductance);
       context.stampCurrentSource(0, 1, previousCurrent);
-    }
-
-    public void postStep(PowerNetworkServer network) {
-      double voltage = network.getVoltageAt(this, 0) - network.getVoltageAt(this, 1);
-      previousCurrent += (network.getTimeStepSeconds() / inductance) * voltage;
     }
 
     @Override
@@ -237,9 +269,9 @@ public final class CircuitComponents {
     }
 
     @Override
-    public void onSubstepComplete(org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork<?> network, double timeStepSeconds) {
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
       double voltage = network.getVoltageAt(this, 0) - network.getVoltageAt(this, 1);
-      previousCurrent += (timeStepSeconds / inductance) * voltage;
+      previousCurrent += (timeStepSeconds / Math.max(inductance, 1.0e-18)) * voltage;
     }
 
     @Override
@@ -276,10 +308,6 @@ public final class CircuitComponents {
       }
     }
   }
-  // Nonlinear devices below use companion-model linearization around the solver's current
-  // Newton guess, exposed through context.getPreviousVoltage(...). The solver iterates those
-  // guesses within each physTick, so these stamps behave as an actual nonlinear solve rather
-  // than a once-per-tick frozen linearization.
 
   public static final class DiodeNode extends PowerNode {
     private static final double DEFAULT_SATURATION_CURRENT = 1.0e-12;
@@ -287,6 +315,7 @@ public final class CircuitComponents {
 
     private final double saturationCurrent;
     private final double thermalVoltage;
+    private double previousJunctionVoltage;
 
     public DiodeNode() {
       this(DEFAULT_SATURATION_CURRENT, DEFAULT_THERMAL_VOLTAGE);
@@ -300,8 +329,20 @@ public final class CircuitComponents {
 
     @Override
     public void stamp(CircuitStampContext context) {
-      double vd = context.getPreviousVoltage(0) - context.getPreviousVoltage(1);
-      stampLinearizedBranch(context, 0, 1, 1.0, linearizeJunction(vd, saturationCurrent, thermalVoltage));
+      double voltage = context.getPreviousVoltage(0) - context.getPreviousVoltage(1);
+      JunctionLinearization junction = linearizeJunction(
+          voltage,
+          previousJunctionVoltage,
+          saturationCurrent,
+          thermalVoltage,
+          JUNCTION_SHUNT_CONDUCTANCE
+      );
+      stampLinearizedBranch(context, 0, 1, junction);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      previousJunctionVoltage = network.getVoltageAt(this, 0) - network.getVoltageAt(this, 1);
     }
 
     @Override
@@ -315,16 +356,168 @@ public final class CircuitComponents {
     }
   }
 
-  public static final class NPNTransistorNode extends PowerNode {
+  private abstract static class AbstractBjtNode extends PowerNode {
+    private final double saturationCurrent;
+    private final double thermalVoltage;
+    private final double alphaForward;
+    private final double alphaReverse;
+    private double previousForwardJunction;
+    private double previousReverseJunction;
+
+    protected AbstractBjtNode(double saturationCurrent, double thermalVoltage, double forwardBeta, double reverseBeta) {
+      super(3);
+      this.saturationCurrent = saturationCurrent;
+      this.thermalVoltage = thermalVoltage;
+      this.alphaForward = forwardBeta / (forwardBeta + 1.0);
+      this.alphaReverse = reverseBeta / (reverseBeta + 1.0);
+    }
+
+    protected abstract int polarity();
+
+    @Override
+    public void stamp(CircuitStampContext context) {
+      int polarity = polarity();
+      double baseVoltage = context.getPreviousVoltage(0);
+      double collectorVoltage = context.getPreviousVoltage(1);
+      double emitterVoltage = context.getPreviousVoltage(2);
+
+      double forwardVoltage = polarity * (baseVoltage - emitterVoltage);
+      double reverseVoltage = polarity * (baseVoltage - collectorVoltage);
+
+      JunctionLinearization forward = linearizeJunction(
+          forwardVoltage,
+          previousForwardJunction,
+          saturationCurrent,
+          thermalVoltage,
+          JUNCTION_SHUNT_CONDUCTANCE
+      );
+      JunctionLinearization reverse = linearizeJunction(
+          reverseVoltage,
+          previousReverseJunction,
+          saturationCurrent,
+          thermalVoltage,
+          JUNCTION_SHUNT_CONDUCTANCE
+      );
+
+      double ifwd = forward.current();
+      double gfwd = forward.conductance();
+      double irev = reverse.current();
+      double grev = reverse.conductance();
+
+      double collectorCurrent;
+      double collectorGmForward;
+      double collectorGmReverse;
+      double baseCurrent;
+      double baseGmForward;
+      double baseGmReverse;
+      double emitterCurrent;
+      double emitterGmForward;
+      double emitterGmReverse;
+
+      if (polarity > 0) {
+        collectorCurrent = alphaForward * ifwd - irev;
+        collectorGmForward = alphaForward * gfwd;
+        collectorGmReverse = -grev;
+
+        baseCurrent = (1.0 - alphaForward) * ifwd + (1.0 - alphaReverse) * irev;
+        baseGmForward = (1.0 - alphaForward) * gfwd;
+        baseGmReverse = (1.0 - alphaReverse) * grev;
+
+        emitterCurrent = -ifwd + alphaReverse * irev;
+        emitterGmForward = -gfwd;
+        emitterGmReverse = alphaReverse * grev;
+      } else {
+        collectorCurrent = -alphaForward * ifwd + irev;
+        collectorGmForward = -alphaForward * gfwd;
+        collectorGmReverse = grev;
+
+        baseCurrent = -(1.0 - alphaForward) * ifwd + (1.0 - alphaReverse) * irev;
+        baseGmForward = -(1.0 - alphaForward) * gfwd;
+        baseGmReverse = (1.0 - alphaReverse) * grev;
+
+        emitterCurrent = ifwd - alphaReverse * irev;
+        emitterGmForward = gfwd;
+        emitterGmReverse = -alphaReverse * grev;
+      }
+
+      double collectorConstant = collectorCurrent
+          - collectorGmForward * forward.voltage()
+          - collectorGmReverse * reverse.voltage();
+      double baseConstant = baseCurrent
+          - baseGmForward * forward.voltage()
+          - baseGmReverse * reverse.voltage();
+      double emitterConstant = emitterCurrent
+          - emitterGmForward * forward.voltage()
+          - emitterGmReverse * reverse.voltage();
+
+      int forwardPositivePort = polarity > 0 ? 0 : 2;
+      int forwardNegativePort = polarity > 0 ? 2 : 0;
+      int reversePositivePort = polarity > 0 ? 0 : 1;
+      int reverseNegativePort = polarity > 0 ? 1 : 0;
+
+      stampTerminalCurrent(
+          context,
+          1,
+          CircuitStampContext.GROUND,
+          forwardPositivePort,
+          forwardNegativePort,
+          collectorGmForward,
+          reversePositivePort,
+          reverseNegativePort,
+          collectorGmReverse,
+          collectorConstant
+      );
+      stampTerminalCurrent(
+          context,
+          0,
+          CircuitStampContext.GROUND,
+          forwardPositivePort,
+          forwardNegativePort,
+          baseGmForward,
+          reversePositivePort,
+          reverseNegativePort,
+          baseGmReverse,
+          baseConstant
+      );
+      stampTerminalCurrent(
+          context,
+          2,
+          CircuitStampContext.GROUND,
+          forwardPositivePort,
+          forwardNegativePort,
+          emitterGmForward,
+          reversePositivePort,
+          reverseNegativePort,
+          emitterGmReverse,
+          emitterConstant
+      );
+
+      context.stampConductance(1, 2, BJT_OUTPUT_CONDUCTANCE);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      int polarity = polarity();
+      previousForwardJunction = polarity * (network.getVoltageAt(this, 0) - network.getVoltageAt(this, 2));
+      previousReverseJunction = polarity * (network.getVoltageAt(this, 0) - network.getVoltageAt(this, 1));
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_NONLINEAR;
+    }
+
+    @Override
+    public double getSuggestedMaxTimeStepSeconds() {
+      return DYNAMIC_NONLINEAR_MAX_STEP;
+    }
+  }
+
+  public static final class NPNTransistorNode extends AbstractBjtNode {
     private static final double DEFAULT_SATURATION_CURRENT = 1.0e-14;
     private static final double DEFAULT_THERMAL_VOLTAGE = 0.02585;
     private static final double DEFAULT_FORWARD_BETA = 100.0;
     private static final double DEFAULT_REVERSE_BETA = 0.1;
-
-    private final double saturationCurrent;
-    private final double thermalVoltage;
-    private final double alphaF;
-    private final double alphaR;
 
     public NPNTransistorNode() {
       this(DEFAULT_SATURATION_CURRENT, DEFAULT_THERMAL_VOLTAGE, DEFAULT_FORWARD_BETA, DEFAULT_REVERSE_BETA);
@@ -335,97 +528,20 @@ public final class CircuitComponents {
     }
 
     public NPNTransistorNode(double saturationCurrent, double thermalVoltage, double forwardBeta, double reverseBeta) {
-      super(3);
-      this.saturationCurrent = saturationCurrent;
-      this.thermalVoltage = thermalVoltage;
-      this.alphaF = forwardBeta / (forwardBeta + 1.0);
-      this.alphaR = reverseBeta / (reverseBeta + 1.0);
+      super(saturationCurrent, thermalVoltage, forwardBeta, reverseBeta);
     }
 
     @Override
-    public void stamp(CircuitStampContext context) {
-      double vbe = context.getPreviousVoltage(0) - context.getPreviousVoltage(2);
-      double vbc = context.getPreviousVoltage(0) - context.getPreviousVoltage(1);
-      JunctionLinearization be = linearizeJunction(vbe, saturationCurrent, thermalVoltage);
-      JunctionLinearization bc = linearizeJunction(vbc, saturationCurrent, thermalVoltage);
-      double ifwd = be.current();
-      double gfwd = be.conductance();
-      double irev = bc.current();
-      double grev = bc.conductance();
-
-      double collectorCurrent = alphaF * ifwd - irev;
-      double collectorGmBe = alphaF * gfwd;
-      double collectorGmBc = -grev;
-      double collectorConstant = collectorCurrent - collectorGmBe * vbe - collectorGmBc * vbc;
-      stampLinearizedTwoControlCurrent(
-          context,
-          1,
-          CircuitStampContext.GROUND,
-          0,
-          2,
-          collectorGmBe,
-          0,
-          1,
-          collectorGmBc,
-          collectorConstant
-      );
-
-      double baseCurrent = (1.0 - alphaF) * ifwd + (1.0 - alphaR) * irev;
-      double baseGmBe = (1.0 - alphaF) * gfwd;
-      double baseGmBc = (1.0 - alphaR) * grev;
-      double baseConstant = baseCurrent - baseGmBe * vbe - baseGmBc * vbc;
-      stampLinearizedTwoControlCurrent(
-          context,
-          0,
-          CircuitStampContext.GROUND,
-          0,
-          2,
-          baseGmBe,
-          0,
-          1,
-          baseGmBc,
-          baseConstant
-      );
-
-      double emitterCurrent = -ifwd + alphaR * irev;
-      double emitterGmBe = -gfwd;
-      double emitterGmBc = alphaR * grev;
-      double emitterConstant = emitterCurrent - emitterGmBe * vbe - emitterGmBc * vbc;
-      stampLinearizedTwoControlCurrent(
-          context,
-          2,
-          CircuitStampContext.GROUND,
-          0,
-          2,
-          emitterGmBe,
-          0,
-          1,
-          emitterGmBc,
-          emitterConstant
-      );
-    }
-
-    @Override
-    public PowerNodeSimulationMode getSimulationMode() {
-      return PowerNodeSimulationMode.DYNAMIC_NONLINEAR;
-    }
-
-    @Override
-    public double getSuggestedMaxTimeStepSeconds() {
-      return DYNAMIC_NONLINEAR_MAX_STEP;
+    protected int polarity() {
+      return 1;
     }
   }
 
-  public static final class PNPTransistorNode extends PowerNode {
+  public static final class PNPTransistorNode extends AbstractBjtNode {
     private static final double DEFAULT_SATURATION_CURRENT = 1.0e-14;
     private static final double DEFAULT_THERMAL_VOLTAGE = 0.02585;
     private static final double DEFAULT_FORWARD_BETA = 100.0;
     private static final double DEFAULT_REVERSE_BETA = 0.1;
-
-    private final double saturationCurrent;
-    private final double thermalVoltage;
-    private final double alphaF;
-    private final double alphaR;
 
     public PNPTransistorNode() {
       this(DEFAULT_SATURATION_CURRENT, DEFAULT_THERMAL_VOLTAGE, DEFAULT_FORWARD_BETA, DEFAULT_REVERSE_BETA);
@@ -436,74 +552,157 @@ public final class CircuitComponents {
     }
 
     public PNPTransistorNode(double saturationCurrent, double thermalVoltage, double forwardBeta, double reverseBeta) {
-      super(3);
-      this.saturationCurrent = saturationCurrent;
-      this.thermalVoltage = thermalVoltage;
-      this.alphaF = forwardBeta / (forwardBeta + 1.0);
-      this.alphaR = reverseBeta / (reverseBeta + 1.0);
+      super(saturationCurrent, thermalVoltage, forwardBeta, reverseBeta);
     }
 
     @Override
+    protected int polarity() {
+      return -1;
+    }
+  }
+
+  private abstract static class AbstractMosfetNode extends PowerNode {
+    private final double thresholdVoltage;
+    private final double transconductance;
+    private final double bodyDiodeSaturationCurrent;
+    private final double bodyDiodeThermalVoltage;
+    private double previousBodyDiodeVoltage;
+
+    protected AbstractMosfetNode(
+        double thresholdVoltage,
+        double transconductance,
+        double bodyDiodeSaturationCurrent,
+        double bodyDiodeThermalVoltage
+    ) {
+      super(3);
+      this.thresholdVoltage = thresholdVoltage;
+      this.transconductance = transconductance;
+      this.bodyDiodeSaturationCurrent = bodyDiodeSaturationCurrent;
+      this.bodyDiodeThermalVoltage = bodyDiodeThermalVoltage;
+    }
+
+    protected abstract boolean isPmos();
+
+    @Override
     public void stamp(CircuitStampContext context) {
-      double veb = context.getPreviousVoltage(2) - context.getPreviousVoltage(0);
-      double vcb = context.getPreviousVoltage(1) - context.getPreviousVoltage(0);
-      JunctionLinearization eb = linearizeJunction(veb, saturationCurrent, thermalVoltage);
-      JunctionLinearization cb = linearizeJunction(vcb, saturationCurrent, thermalVoltage);
-      double ifwd = eb.current();
-      double gfwd = eb.conductance();
-      double irev = cb.current();
-      double grev = cb.conductance();
+      double terminal0Voltage = context.getPreviousVoltage(0);
+      double gateVoltage = context.getPreviousVoltage(1);
+      double terminal2Voltage = context.getPreviousVoltage(2);
 
-      double collectorCurrent = -alphaF * ifwd + irev;
-      double collectorGmEb = -alphaF * gfwd;
-      double collectorGmCb = grev;
-      double collectorConstant = collectorCurrent - collectorGmEb * veb - collectorGmCb * vcb;
-      stampLinearizedTwoControlCurrent(
-          context,
-          1,
-          CircuitStampContext.GROUND,
-          2,
-          0,
-          collectorGmEb,
-          1,
-          0,
-          collectorGmCb,
-          collectorConstant
-      );
+      if (isPmos()) {
+        stampPmosChannel(context, terminal0Voltage, gateVoltage, terminal2Voltage);
+        JunctionLinearization bodyDiode = linearizeJunction(
+            terminal0Voltage - terminal2Voltage,
+            previousBodyDiodeVoltage,
+            bodyDiodeSaturationCurrent,
+            bodyDiodeThermalVoltage,
+            JUNCTION_SHUNT_CONDUCTANCE
+        );
+        stampLinearizedBranch(context, 0, 2, bodyDiode);
+      } else {
+        stampNmosChannel(context, terminal0Voltage, gateVoltage, terminal2Voltage);
+        JunctionLinearization bodyDiode = linearizeJunction(
+            terminal2Voltage - terminal0Voltage,
+            previousBodyDiodeVoltage,
+            bodyDiodeSaturationCurrent,
+            bodyDiodeThermalVoltage,
+            JUNCTION_SHUNT_CONDUCTANCE
+        );
+        stampLinearizedBranch(context, 2, 0, bodyDiode);
+      }
 
-      double baseCurrent = -(1.0 - alphaF) * ifwd + (1.0 - alphaR) * irev;
-      double baseGmEb = -(1.0 - alphaF) * gfwd;
-      double baseGmCb = (1.0 - alphaR) * grev;
-      double baseConstant = baseCurrent - baseGmEb * veb - baseGmCb * vcb;
-      stampLinearizedTwoControlCurrent(
-          context,
-          0,
-          CircuitStampContext.GROUND,
-          2,
-          0,
-          baseGmEb,
-          1,
-          0,
-          baseGmCb,
-          baseConstant
-      );
+      context.stampConductance(1, 2, MOS_GATE_LEAKAGE);
+    }
 
-      double emitterCurrent = ifwd - alphaR * irev;
-      double emitterGmEb = gfwd;
-      double emitterGmCb = -alphaR * grev;
-      double emitterConstant = emitterCurrent - emitterGmEb * veb - emitterGmCb * vcb;
-      stampLinearizedTwoControlCurrent(
-          context,
-          2,
-          CircuitStampContext.GROUND,
-          2,
-          0,
-          emitterGmEb,
-          1,
-          0,
-          emitterGmCb,
-          emitterConstant
-      );
+    private void stampNmosChannel(CircuitStampContext context, double drainVoltage, double gateVoltage, double sourceVoltage) {
+      int drainPort = 0;
+      int sourcePort = 2;
+      if (drainVoltage < sourceVoltage) {
+        drainPort = 2;
+        sourcePort = 0;
+        double tmp = drainVoltage;
+        drainVoltage = sourceVoltage;
+        sourceVoltage = tmp;
+      }
+
+      double vgs = gateVoltage - sourceVoltage;
+      double vds = drainVoltage - sourceVoltage;
+      double overdrive = vgs - thresholdVoltage;
+
+      double id;
+      double gm;
+      double gds;
+      if (overdrive <= 0.0) {
+        id = MOS_OFF_CONDUCTANCE * vds;
+        gm = 0.0;
+        gds = MOS_OFF_CONDUCTANCE;
+      } else if (vds < overdrive) {
+        double baseCurrent = transconductance * (2.0 * overdrive * vds - vds * vds);
+        double slopeFactor = 1.0 + MOS_CHANNEL_LENGTH_MODULATION * vds;
+        id = baseCurrent * slopeFactor;
+        gm = 2.0 * transconductance * vds * slopeFactor;
+        gds = transconductance * (2.0 * overdrive - 2.0 * vds) * slopeFactor
+            + baseCurrent * MOS_CHANNEL_LENGTH_MODULATION;
+        gds = Math.max(gds, MOS_OFF_CONDUCTANCE);
+      } else {
+        double baseCurrent = transconductance * overdrive * overdrive;
+        id = baseCurrent * (1.0 + MOS_CHANNEL_LENGTH_MODULATION * vds);
+        gm = 2.0 * transconductance * overdrive * (1.0 + MOS_CHANNEL_LENGTH_MODULATION * vds);
+        gds = Math.max(baseCurrent * MOS_CHANNEL_LENGTH_MODULATION, MOS_OFF_CONDUCTANCE);
+      }
+
+      context.stampConductance(drainPort, sourcePort, gds);
+      context.stampVCCS(drainPort, sourcePort, 1, sourcePort, gm);
+      context.stampCurrentSource(drainPort, sourcePort, id - gds * vds - gm * vgs);
+    }
+
+    private void stampPmosChannel(CircuitStampContext context, double drainVoltage, double gateVoltage, double sourceVoltage) {
+      int sourcePort = 2;
+      int drainPort = 0;
+      if (sourceVoltage < drainVoltage) {
+        sourcePort = 0;
+        drainPort = 2;
+        double tmp = drainVoltage;
+        drainVoltage = sourceVoltage;
+        sourceVoltage = tmp;
+      }
+
+      double vsg = sourceVoltage - gateVoltage;
+      double vsd = sourceVoltage - drainVoltage;
+      double overdrive = vsg - thresholdVoltage;
+
+      double isd;
+      double gm;
+      double gsd;
+      if (overdrive <= 0.0) {
+        isd = MOS_OFF_CONDUCTANCE * vsd;
+        gm = 0.0;
+        gsd = MOS_OFF_CONDUCTANCE;
+      } else if (vsd < overdrive) {
+        double baseCurrent = transconductance * (2.0 * overdrive * vsd - vsd * vsd);
+        double slopeFactor = 1.0 + MOS_CHANNEL_LENGTH_MODULATION * vsd;
+        isd = baseCurrent * slopeFactor;
+        gm = 2.0 * transconductance * vsd * slopeFactor;
+        gsd = transconductance * (2.0 * overdrive - 2.0 * vsd) * slopeFactor
+            + baseCurrent * MOS_CHANNEL_LENGTH_MODULATION;
+        gsd = Math.max(gsd, MOS_OFF_CONDUCTANCE);
+      } else {
+        double baseCurrent = transconductance * overdrive * overdrive;
+        isd = baseCurrent * (1.0 + MOS_CHANNEL_LENGTH_MODULATION * vsd);
+        gm = 2.0 * transconductance * overdrive * (1.0 + MOS_CHANNEL_LENGTH_MODULATION * vsd);
+        gsd = Math.max(baseCurrent * MOS_CHANNEL_LENGTH_MODULATION, MOS_OFF_CONDUCTANCE);
+      }
+
+      context.stampConductance(sourcePort, drainPort, gsd);
+      context.stampVCCS(sourcePort, drainPort, sourcePort, 1, gm);
+      context.stampCurrentSource(sourcePort, drainPort, isd - gsd * vsd - gm * vsg);
+    }
+
+    @Override
+    public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
+      previousBodyDiodeVoltage = isPmos()
+          ? network.getVoltageAt(this, 0) - network.getVoltageAt(this, 2)
+          : network.getVoltageAt(this, 2) - network.getVoltageAt(this, 0);
     }
 
     @Override
@@ -517,141 +716,53 @@ public final class CircuitComponents {
     }
   }
 
-  public static final class NMOSTransistorNode extends PowerNode {
+  public static final class NMOSTransistorNode extends AbstractMosfetNode {
     private static final double DEFAULT_THRESHOLD = 1.0;
     private static final double DEFAULT_TRANSCONDUCTANCE = 1.0e-3;
-    private static final double BODY_DIODE_SATURATION_CURRENT = 1.0e-12;
-    private static final double BODY_DIODE_THERMAL_VOLTAGE = 0.02585;
-
-    private final double thresholdVoltage;
-    private final double transconductance;
+    private static final double DEFAULT_BODY_DIODE_SATURATION_CURRENT = 1.0e-12;
+    private static final double DEFAULT_BODY_DIODE_THERMAL_VOLTAGE = 0.02585;
 
     public NMOSTransistorNode() {
       this(DEFAULT_THRESHOLD, DEFAULT_TRANSCONDUCTANCE);
     }
 
     public NMOSTransistorNode(double thresholdVoltage, double transconductance) {
-      super(3);
-      this.thresholdVoltage = thresholdVoltage;
-      this.transconductance = transconductance;
-    }
-
-    @Override
-    public void stamp(CircuitStampContext context) {
-      double vd = context.getPreviousVoltage(0);
-      double vg = context.getPreviousVoltage(1);
-      double vs = context.getPreviousVoltage(2);
-      double vgs = vg - vs;
-      double vds = vd - vs;
-      double vov = vgs - thresholdVoltage;
-
-      double id;
-      double gds;
-      double gm;
-      if (vov <= 0.0) {
-        id = MOS_OFF_CONDUCTANCE * vds;
-        gds = MOS_OFF_CONDUCTANCE;
-        gm = 0.0;
-      } else if (vds < vov) {
-        id = transconductance * (2.0 * vov * vds - vds * vds);
-        gds = Math.max(2.0 * transconductance * (vov - vds), MOS_OFF_CONDUCTANCE);
-        gm = 2.0 * transconductance * vds;
-      } else {
-        id = transconductance * vov * vov;
-        gds = MOS_OFF_CONDUCTANCE;
-        gm = 2.0 * transconductance * vov;
-      }
-
-      context.stampConductance(0, 2, gds);
-      context.stampVCCS(0, 2, 1, 2, gm);
-      context.stampCurrentSource(0, 2, id - gds * vds - gm * vgs);
-      context.stampConductance(1, 2, GATE_LEAKAGE);
-      stampLinearizedBranch(
-          context,
-          2,
-          0,
-          1.0,
-          linearizeJunction(vs - vd, BODY_DIODE_SATURATION_CURRENT, BODY_DIODE_THERMAL_VOLTAGE)
+      super(
+          thresholdVoltage,
+          transconductance,
+          DEFAULT_BODY_DIODE_SATURATION_CURRENT,
+          DEFAULT_BODY_DIODE_THERMAL_VOLTAGE
       );
     }
 
     @Override
-    public PowerNodeSimulationMode getSimulationMode() {
-      return PowerNodeSimulationMode.DYNAMIC_NONLINEAR;
-    }
-
-    @Override
-    public double getSuggestedMaxTimeStepSeconds() {
-      return DYNAMIC_NONLINEAR_MAX_STEP;
+    protected boolean isPmos() {
+      return false;
     }
   }
 
-  public static final class PMOSTransistorNode extends PowerNode {
+  public static final class PMOSTransistorNode extends AbstractMosfetNode {
     private static final double DEFAULT_THRESHOLD = 1.0;
     private static final double DEFAULT_TRANSCONDUCTANCE = 1.0e-3;
-    private static final double BODY_DIODE_SATURATION_CURRENT = 1.0e-12;
-    private static final double BODY_DIODE_THERMAL_VOLTAGE = 0.02585;
-
-    private final double thresholdVoltage;
-    private final double transconductance;
+    private static final double DEFAULT_BODY_DIODE_SATURATION_CURRENT = 1.0e-12;
+    private static final double DEFAULT_BODY_DIODE_THERMAL_VOLTAGE = 0.02585;
 
     public PMOSTransistorNode() {
       this(DEFAULT_THRESHOLD, DEFAULT_TRANSCONDUCTANCE);
     }
 
     public PMOSTransistorNode(double thresholdVoltage, double transconductance) {
-      super(3);
-      this.thresholdVoltage = thresholdVoltage;
-      this.transconductance = transconductance;
-    }
-
-    @Override
-    public void stamp(CircuitStampContext context) {
-      double vd = context.getPreviousVoltage(0);
-      double vg = context.getPreviousVoltage(1);
-      double vs = context.getPreviousVoltage(2);
-      double vsg = vs - vg;
-      double vsd = vs - vd;
-      double vov = vsg - thresholdVoltage;
-
-      double isd;
-      double gsd;
-      double gm;
-      if (vov <= 0.0) {
-        isd = MOS_OFF_CONDUCTANCE * vsd;
-        gsd = MOS_OFF_CONDUCTANCE;
-        gm = 0.0;
-      } else if (vsd < vov) {
-        isd = transconductance * (2.0 * vov * vsd - vsd * vsd);
-        gsd = Math.max(2.0 * transconductance * (vov - vsd), MOS_OFF_CONDUCTANCE);
-        gm = 2.0 * transconductance * vsd;
-      } else {
-        isd = transconductance * vov * vov;
-        gsd = MOS_OFF_CONDUCTANCE;
-        gm = 2.0 * transconductance * vov;
-      }
-
-      context.stampConductance(0, 2, gsd);
-      context.stampVCCS(0, 2, 1, 2, gm);
-      context.stampCurrentSource(0, 2, -isd + gsd * vsd + gm * vsg);
-      context.stampConductance(1, 2, GATE_LEAKAGE);
-      stampLinearizedBranch(
-          context,
-          0,
-          2,
-          1.0,
-          linearizeJunction(vd - vs, BODY_DIODE_SATURATION_CURRENT, BODY_DIODE_THERMAL_VOLTAGE)
+      super(
+          thresholdVoltage,
+          transconductance,
+          DEFAULT_BODY_DIODE_SATURATION_CURRENT,
+          DEFAULT_BODY_DIODE_THERMAL_VOLTAGE
       );
     }
 
     @Override
-    public PowerNodeSimulationMode getSimulationMode() {
-      return PowerNodeSimulationMode.DYNAMIC_NONLINEAR;
-    }
-
-    @Override
-    public double getSuggestedMaxTimeStepSeconds() {
-      return DYNAMIC_NONLINEAR_MAX_STEP;
+    protected boolean isPmos() {
+      return true;
     }
   }
 }

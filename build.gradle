@@ -202,6 +202,7 @@ test {
 tasks.register("runPowerNetworkVisualizer", JavaExec) {
     group = "verification"
     description = "Launch the manual potato battery network visualizer"
+    dependsOn testClasses
     classpath = sourceSets.test.runtimeClasspath
     mainClass = "org.valkyrienskies.horizons.potato_battery.PowerNetworkVisualizer"
 
@@ -212,6 +213,7 @@ tasks.register("runPowerNetworkVisualizer", JavaExec) {
 tasks.register("runRLCCircuitVisualizer", JavaExec) {
     group = "verification"
     description = "Launch the manual RLC circuit visualizer"
+    dependsOn testClasses
     classpath = sourceSets.test.runtimeClasspath
     mainClass = "org.valkyrienskies.horizons.potato_battery.RLCCircuitVisualizer"
 
@@ -222,6 +224,7 @@ tasks.register("runRLCCircuitVisualizer", JavaExec) {
 tasks.register("runAstableMultivibratorVisualizer", JavaExec) {
     group = "verification"
     description = "Launch the manual astable multivibrator (transistor oscillator) visualizer"
+    dependsOn testClasses
     classpath = sourceSets.test.runtimeClasspath
     mainClass = "org.valkyrienskies.horizons.potato_battery.AstableMultivibratorVisualizer"
 
@@ -229,12 +232,58 @@ tasks.register("runAstableMultivibratorVisualizer", JavaExec) {
     systemProperty "power.solver", solverName
 }
 
+tasks.register("runAstableSpikeDiagnostics", JavaExec) {
+    group = "verification"
+    description = "Run a long astable multivibrator soak and write CSV diagnostics"
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "org.valkyrienskies.horizons.potato_battery.AstableSpikeDiagnostics"
+
+    def solverName = (project.findProperty("powerSolver") ?: "ejml").toString()
+    systemProperty "power.solver", solverName
+    if (project.hasProperty("astableSteps")) {
+        systemProperty "power.astable.steps", project.property("astableSteps").toString()
+    }
+}
+
 tasks.register("runTransistorDiagnostics", JavaExec) {
     group = "verification"
     description = "Sweep transistor operating points and write CSV diagnostics"
+    dependsOn testClasses
     classpath = sourceSets.test.runtimeClasspath
     mainClass = "org.valkyrienskies.horizons.potato_battery.TransistorDiagnostics"
 
     def solverName = (project.findProperty("powerSolver") ?: "all").toString()
     systemProperty "power.solver", solverName
+    if (project.hasProperty("transistorStepsPerPoint")) {
+        systemProperty "power.transistor.steps_per_point", project.property("transistorStepsPerPoint").toString()
+    }
+}
+
+tasks.register("runComponentBenchmarkDiagnostics", JavaExec) {
+    group = "verification"
+    description = "Benchmark representative linear, dynamic, and nonlinear circuit mixes"
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "org.valkyrienskies.horizons.potato_battery.ComponentBenchmarkDiagnostics"
+
+    def solverName = (project.findProperty("powerSolver") ?: "all").toString()
+    systemProperty "power.solver", solverName
+    if (project.hasProperty("benchmarkIterations")) {
+        systemProperty "power.benchmark.iterations", project.property("benchmarkIterations").toString()
+    }
+}
+
+tasks.register("runSolverPhaseBenchmarkDiagnostics", JavaExec) {
+    group = "verification"
+    description = "Benchmark solver phases separately for expensive nonlinear circuits"
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "org.valkyrienskies.horizons.potato_battery.SolverPhaseBenchmarkDiagnostics"
+
+    def solverName = (project.findProperty("powerSolver") ?: "all").toString()
+    systemProperty "power.solver", solverName
+    if (project.hasProperty("benchmarkIterations")) {
+        systemProperty "power.benchmark.iterations", project.property("benchmarkIterations").toString()
+    }
 }

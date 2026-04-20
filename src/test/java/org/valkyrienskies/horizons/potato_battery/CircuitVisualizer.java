@@ -9,9 +9,12 @@ import org.valkyrienskies.horizons.potato_battery.impl.network.solver.EJMLSolver
 import org.valkyrienskies.horizons.potato_battery.impl.network.solver.JKLUSolver;
 
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import java.awt.BorderLayout;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -45,7 +48,16 @@ public final class CircuitVisualizer {
       VisualizerModel model = new VisualizerModel(scenario, solver, solverProp.toUpperCase());
       JFrame frame = new JFrame(scenario.title());
       frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-      frame.setContentPane(new VisualizerPanel(model));
+      JPanel root = new JPanel(new BorderLayout());
+      root.setBackground(new Color(14, 16, 20));
+      root.add(new VisualizerPanel(model), BorderLayout.CENTER);
+      JPanel controls = new JPanel();
+      controls.setBackground(new Color(18, 21, 27));
+      scenario.populateControls(controls);
+      if (controls.getComponentCount() > 0) {
+        root.add(controls, BorderLayout.SOUTH);
+      }
+      frame.setContentPane(root);
       frame.pack();
       frame.setLocationRelativeTo(null);
       frame.setVisible(true);
@@ -69,6 +81,9 @@ public final class CircuitVisualizer {
     List<Readout> readouts();
 
     void drawSchematic(Graphics2D g, int left, int top, int width, int height);
+
+    default void populateControls(JPanel controls) {
+    }
   }
 
   public static final class CircuitBuilder {
@@ -99,6 +114,31 @@ public final class CircuitVisualizer {
 
   public record Readout(String format, DoubleSupplier value) {}
 
+  public static JPanel labeledControl(String label, java.awt.Component control, JLabel valueLabel) {
+    JPanel panel = new JPanel();
+    panel.setBackground(new Color(18, 21, 27));
+    panel.add(createLabel(label));
+    panel.add(control);
+    if (valueLabel != null) {
+      valueLabel.setForeground(new Color(226, 230, 236));
+      valueLabel.setHorizontalAlignment(SwingConstants.LEFT);
+      panel.add(valueLabel);
+    }
+    return panel;
+  }
+
+  public static JLabel createValueLabel(String text) {
+    JLabel label = new JLabel(text);
+    label.setForeground(new Color(226, 230, 236));
+    return label;
+  }
+
+  public static JLabel createLabel(String text) {
+    JLabel label = new JLabel(text);
+    label.setForeground(new Color(226, 230, 236));
+    return label;
+  }
+
   private static final class VisualizerModel {
     private final Scenario scenario;
     private final FixedStepNetwork network;
@@ -107,6 +147,11 @@ public final class CircuitVisualizer {
     private final List<Readout> readouts;
     private final List<Deque<Double>> histories;
     private double time;
+    private long statsWindowStartNanos = System.nanoTime();
+    private int stepsThisWindow;
+    private int framesThisWindow;
+    private double ticksPerSecond;
+    private double framesPerSecond;
 
     VisualizerModel(Scenario scenario, IPBSolver solver, String solverName) {
       this.scenario = scenario;
@@ -135,6 +180,7 @@ public final class CircuitVisualizer {
         for (int i = 0; i < SUBSTEPS_PER_FRAME; i++) {
           step();
         }
+        recordFrame();
         frame.repaint();
       });
       timer.start();
@@ -152,6 +198,47 @@ public final class CircuitVisualizer {
           history.removeFirst();
         }
       }
+      stepsThisWindow++;
+      updateStatsIfNeeded();
+    }
+
+    double ticksPerSecond() {
+      return ticksPerSecond;
+    }
+
+    double idealTicksPerSecond() {
+      return 1.0 / scenario.timeStep();
+    }
+
+    double slowdownFactor() {
+      double actual = ticksPerSecond();
+      if (actual <= 1.0e-9) {
+        return Double.POSITIVE_INFINITY;
+      }
+      return idealTicksPerSecond() / actual;
+    }
+
+    double framesPerSecond() {
+      return framesPerSecond;
+    }
+
+    private void recordFrame() {
+      framesThisWindow++;
+      updateStatsIfNeeded();
+    }
+
+    private void updateStatsIfNeeded() {
+      long now = System.nanoTime();
+      long elapsed = now - statsWindowStartNanos;
+      if (elapsed < 250_000_000L) {
+        return;
+      }
+      double seconds = elapsed / 1_000_000_000.0;
+      ticksPerSecond = stepsThisWindow / seconds;
+      framesPerSecond = framesThisWindow / seconds;
+      stepsThisWindow = 0;
+      framesThisWindow = 0;
+      statsWindowStartNanos = now;
     }
   }
 
@@ -175,6 +262,10 @@ public final class CircuitVisualizer {
       g.setColor(new Color(226, 230, 236));
       g.drawString("Solver: " + model.solverName, 36, 32);
       g.drawString(String.format("dt: %.5f s", model.scenario.timeStep()), 36, 56);
+      g.drawString(String.format("TPS: %.1f", model.ticksPerSecond()), 160, 32);
+      g.drawString(String.format("FPS: %.1f", model.framesPerSecond()), 160, 56);
+      g.drawString(String.format("Ideal TPS: %.1f", model.idealTicksPerSecond()), 36, 84);
+      g.drawString(String.format("Slowdown: %.2fx", model.slowdownFactor()), 160, 84);
 
       for (int i = 0; i < model.readouts.size(); i++) {
         Readout r = model.readouts.get(i);

@@ -25,11 +25,11 @@ import java.util.function.Supplier;
 
 public final class TransistorDiagnostics {
   private static final double WIRE_RESISTANCE = 1.0e-6;
-  private static final int STEPS_PER_POINT = 80;
 
   private TransistorDiagnostics() {}
 
   public static void main(String[] args) throws IOException {
+    int stepsPerPoint = Integer.getInteger("power.transistor.steps_per_point", 24);
     List<SolverSpec> solvers = selectedSolvers(System.getProperty("power.solver", "all"));
     Path outputDir = Path.of("build", "reports", "transistor-diagnostics");
     Files.createDirectories(outputDir);
@@ -37,10 +37,10 @@ public final class TransistorDiagnostics {
     for (SolverSpec solver : solvers) {
       List<String> rows = new ArrayList<>();
       rows.add("scenario,bias,vbe_or_vsg,vce_or_vsd,ib_or_ig,ic_or_id,terminal0,terminal1,terminal2");
-      rows.addAll(runNpnSweep(solver));
-      rows.addAll(runPnpSweep(solver));
-      rows.addAll(runNmosSweep(solver));
-      rows.addAll(runPmosSweep(solver));
+      rows.addAll(runNpnSweep(solver, stepsPerPoint));
+      rows.addAll(runPnpSweep(solver, stepsPerPoint));
+      rows.addAll(runNmosSweep(solver, stepsPerPoint));
+      rows.addAll(runPmosSweep(solver, stepsPerPoint));
 
       Path output = outputDir.resolve(solver.name().toLowerCase(Locale.ROOT) + ".csv");
       Files.write(output, rows, StandardCharsets.UTF_8);
@@ -48,7 +48,7 @@ public final class TransistorDiagnostics {
     }
   }
 
-  private static List<String> runNpnSweep(SolverSpec solver) {
+  private static List<String> runNpnSweep(SolverSpec solver, int stepsPerPoint) {
     List<String> rows = new ArrayList<>();
     for (int step = 0; step <= 40; step++) {
       double baseSupply = step * 0.05;
@@ -73,7 +73,7 @@ public final class TransistorDiagnostics {
       connectBidirectional(rb, 1, q, 0, WIRE_RESISTANCE);
       connectBidirectional(q, 2, ground, 0, WIRE_RESISTANCE);
 
-      settle(network);
+      settle(network, stepsPerPoint);
 
       double vbe = network.getVoltageAt(q, 0) - network.getVoltageAt(q, 2);
       double vce = network.getVoltageAt(q, 1) - network.getVoltageAt(q, 2);
@@ -94,7 +94,7 @@ public final class TransistorDiagnostics {
     return rows;
   }
 
-  private static List<String> runPnpSweep(SolverSpec solver) {
+  private static List<String> runPnpSweep(SolverSpec solver, int stepsPerPoint) {
     List<String> rows = new ArrayList<>();
     for (int step = 0; step <= 40; step++) {
       double baseSupply = 5.0 - step * 0.05;
@@ -119,7 +119,7 @@ public final class TransistorDiagnostics {
       connectBidirectional(vb, 0, rb, 0, WIRE_RESISTANCE);
       connectBidirectional(rb, 1, q, 0, WIRE_RESISTANCE);
 
-      settle(network);
+      settle(network, stepsPerPoint);
 
       double veb = network.getVoltageAt(q, 2) - network.getVoltageAt(q, 0);
       double vec = network.getVoltageAt(q, 2) - network.getVoltageAt(q, 1);
@@ -140,7 +140,7 @@ public final class TransistorDiagnostics {
     return rows;
   }
 
-  private static List<String> runNmosSweep(SolverSpec solver) {
+  private static List<String> runNmosSweep(SolverSpec solver, int stepsPerPoint) {
     List<String> rows = new ArrayList<>();
     for (int step = 0; step <= 100; step++) {
       double gateSupply = step * 0.05;
@@ -162,7 +162,7 @@ public final class TransistorDiagnostics {
       connectBidirectional(vg, 0, m, 1, WIRE_RESISTANCE);
       connectBidirectional(m, 2, ground, 0, WIRE_RESISTANCE);
 
-      settle(network);
+      settle(network, stepsPerPoint);
 
       double vgs = network.getVoltageAt(m, 1) - network.getVoltageAt(m, 2);
       double vds = network.getVoltageAt(m, 0) - network.getVoltageAt(m, 2);
@@ -182,7 +182,7 @@ public final class TransistorDiagnostics {
     return rows;
   }
 
-  private static List<String> runPmosSweep(SolverSpec solver) {
+  private static List<String> runPmosSweep(SolverSpec solver, int stepsPerPoint) {
     List<String> rows = new ArrayList<>();
     for (int step = 0; step <= 100; step++) {
       double gateSupply = 5.0 - step * 0.05;
@@ -204,7 +204,7 @@ public final class TransistorDiagnostics {
       connectBidirectional(rd, 1, ground, 0, WIRE_RESISTANCE);
       connectBidirectional(vg, 0, m, 1, WIRE_RESISTANCE);
 
-      settle(network);
+      settle(network, stepsPerPoint);
 
       double vsg = network.getVoltageAt(m, 2) - network.getVoltageAt(m, 1);
       double vsd = network.getVoltageAt(m, 2) - network.getVoltageAt(m, 0);
@@ -224,8 +224,8 @@ public final class TransistorDiagnostics {
     return rows;
   }
 
-  private static void settle(PowerNetworkServer network) {
-    for (int i = 0; i < STEPS_PER_POINT; i++) {
+  private static void settle(PowerNetworkServer network, int stepsPerPoint) {
+    for (int i = 0; i < stepsPerPoint; i++) {
       network.physTick();
     }
   }
