@@ -3,6 +3,7 @@ package org.valkyrienskies.horizons.potato_battery;
 import net.minecraft.core.BlockPos;
 import org.valkyrienskies.horizons.potato_battery.api.network.CircuitStampContext;
 import org.valkyrienskies.horizons.potato_battery.api.network.IPBSolver;
+import org.valkyrienskies.horizons.potato_battery.api.network.node.PowerNodeSimulationMode;
 import org.valkyrienskies.horizons.potato_battery.impl.PowerNetworkServer;
 import org.valkyrienskies.horizons.potato_battery.impl.network.node.PowerNode;
 import org.valkyrienskies.horizons.potato_battery.impl.network.solver.EJMLSolver;
@@ -223,6 +224,16 @@ public final class PowerNetworkVisualizer {
     @Override
     public int getVoltageSourceCount() {
       return 1;
+    }
+
+    @Override
+    public PowerNodeSimulationMode getSimulationMode() {
+      return PowerNodeSimulationMode.DYNAMIC_LINEAR;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(voltage);
     }
 
     @Override

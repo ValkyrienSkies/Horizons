@@ -36,6 +36,7 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel> {
   private boolean sleeping;
   private double lastSolveMaxVoltageDelta;
   private double lastSolveMaxCurrentDelta;
+  private long lastWakeFingerprint;
 
   public PowerNetworkServer(@Nullable ServerLevel level, @Nullable PhysLevel physLevel) {
     this(level, physLevel, new JKLUSolver());
@@ -113,7 +114,16 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel> {
     }
 
     SimulationPolicy simulationPolicy = classifySimulationPolicy();
-    if (sleeping && !topologyDirty && simulationPolicy.mode == PowerNodeSimulationMode.STATIC_LINEAR) {
+    long wakeFingerprint = computeWakeFingerprint();
+    boolean wakeFingerprintChanged = wakeFingerprint != lastWakeFingerprint;
+    if (wakeFingerprintChanged) {
+      sleeping = false;
+    }
+
+    if (sleeping
+        && !topologyDirty
+        && !wakeFingerprintChanged
+        && simulationPolicy.mode != PowerNodeSimulationMode.DYNAMIC_NONLINEAR) {
       return;
     }
 
@@ -125,11 +135,16 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel> {
         && lastSolveMaxVoltageDelta <= SLEEP_VOLTAGE_DELTA
         && lastSolveMaxCurrentDelta <= SLEEP_CURRENT_DELTA) {
       sleeping = true;
+    } else if (simulationPolicy.mode == PowerNodeSimulationMode.DYNAMIC_LINEAR
+        && lastSolveMaxVoltageDelta <= SLEEP_VOLTAGE_DELTA
+        && lastSolveMaxCurrentDelta <= SLEEP_CURRENT_DELTA) {
+      sleeping = true;
     } else {
       sleeping = false;
     }
 
     topologyDirty = false;
+    lastWakeFingerprint = wakeFingerprint;
   }
 
   @Override
@@ -225,6 +240,15 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel> {
       default -> 1;
     };
     return new SimulationPolicy(mode, cappedSubSteps);
+  }
+
+  private long computeWakeFingerprint() {
+    long fingerprint = 0xcbf29ce484222325L;
+    for (IPowerNode node : nodes.values()) {
+      long nodeFingerprint = node.getWakeFingerprint();
+      fingerprint ^= nodeFingerprint + 0x9e3779b97f4a7c15L + Long.rotateLeft(fingerprint, 6) + (fingerprint >>> 2);
+    }
+    return fingerprint;
   }
 
   private record QueuedChange(BlockPos pos, @Nullable IPowerNode node) {}

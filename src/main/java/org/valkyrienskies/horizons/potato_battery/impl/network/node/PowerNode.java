@@ -121,6 +121,11 @@ public abstract class PowerNode implements IPowerNode {
   }
 
   @Override
+  public long getWakeFingerprint() {
+    return 0L;
+  }
+
+  @Override
   public void onAdded() {
 
   }

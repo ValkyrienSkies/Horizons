@@ -201,6 +201,66 @@ class PowerSolverTest {
         solverName + " nonlinear network should request internal transient substeps");
   }
 
+  @ParameterizedTest(name = "{0} dynamic linear networks sleep after settling")
+  @MethodSource("solvers")
+  void dynamicLinearNetworksSleepAfterSettling(String solverName, Supplier<IPBSolver> solverFactory) {
+    RecordingSolver solver = new RecordingSolver(solverFactory.get());
+    FixedStepNetwork network = new FixedStepNetwork(solver, 1.0 / 20.0);
+    CircuitComponents.VariableVoltageNode source = new CircuitComponents.VariableVoltageNode();
+    source.setVoltage(5.0);
+    CircuitComponents.CapacitorNode capacitor = new CircuitComponents.CapacitorNode(4.7e-6);
+    GroundNode ground = new GroundNode();
+
+    addNode(network, 0, source);
+    addNode(network, 1, capacitor);
+    addNode(network, 2, ground);
+
+    connectBidirectional(source, 0, capacitor, 0, WIRE_RESISTANCE);
+    connectBidirectional(capacitor, 1, ground, 0, WIRE_RESISTANCE);
+    connectBidirectional(source, 1, ground, 0, WIRE_RESISTANCE);
+
+    for (int i = 0; i < 12; i++) {
+      network.physTick();
+    }
+    int solvesAfterSettling = solver.callCount();
+
+    network.physTick();
+
+    assertEquals(solvesAfterSettling, solver.callCount(),
+        solverName + " settled dynamic-linear network should sleep until something changes");
+  }
+
+  @ParameterizedTest(name = "{0} sleeping dynamic linear networks wake when a source changes")
+  @MethodSource("solvers")
+  void dynamicLinearNetworksWakeOnSourceChange(String solverName, Supplier<IPBSolver> solverFactory) {
+    RecordingSolver solver = new RecordingSolver(solverFactory.get());
+    FixedStepNetwork network = new FixedStepNetwork(solver, 1.0 / 20.0);
+    CircuitComponents.VariableVoltageNode source = new CircuitComponents.VariableVoltageNode();
+    source.setVoltage(5.0);
+    ResistorNode load = new ResistorNode(5.0);
+    GroundNode ground = new GroundNode();
+
+    addNode(network, 0, source);
+    addNode(network, 1, load);
+    addNode(network, 2, ground);
+
+    connectBidirectional(source, 0, load, 0, WIRE_RESISTANCE);
+    connectBidirectional(load, 1, ground, 0, WIRE_RESISTANCE);
+    connectBidirectional(source, 1, ground, 0, WIRE_RESISTANCE);
+
+    network.physTick();
+    network.physTick();
+    network.physTick();
+    int solvesBeforeChange = solver.callCount();
+
+    source.setVoltage(3.0);
+    network.physTick();
+
+    assertTrue(solver.callCount() > solvesBeforeChange,
+        solverName + " sleeping network should wake and solve after source voltage changes");
+    assertEquals(3.0, network.getVoltageAt(source, 0) - network.getVoltageAt(source, 1), VOLTAGE_TOLERANCE);
+  }
+
   @ParameterizedTest(name = "{0} forward-biased diode settles near Shockley drop")
   @MethodSource("solvers")
   void diodeForwardBiasMatchesShockley(String solverName, Supplier<IPBSolver> solverFactory) {

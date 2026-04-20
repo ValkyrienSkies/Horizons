@@ -95,6 +95,11 @@ public final class CircuitComponents {
     }
 
     @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(voltage);
+    }
+
+    @Override
     public int getVoltageSourceCount() {
       return 1;
     }
@@ -193,6 +198,11 @@ public final class CircuitComponents {
     public void onSubstepComplete(org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork<?> network, double timeStepSeconds) {
       previousVoltage = network.getVoltageAt(this, 0) - network.getVoltageAt(this, 1);
     }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(previousVoltage);
+    }
   }
 
   public static final class InductorNode extends PowerNode {
@@ -230,6 +240,11 @@ public final class CircuitComponents {
     public void onSubstepComplete(org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork<?> network, double timeStepSeconds) {
       double voltage = network.getVoltageAt(this, 0) - network.getVoltageAt(this, 1);
       previousCurrent += (timeStepSeconds / inductance) * voltage;
+    }
+
+    @Override
+    public long getWakeFingerprint() {
+      return Double.doubleToLongBits(previousCurrent);
     }
   }
 

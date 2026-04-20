@@ -111,6 +111,10 @@ public interface IPowerNode {
   default void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
   }
 
+  default long getWakeFingerprint() {
+    return 0L;
+  }
+
 
   //EVENTS
   void onAdded();
