@@ -11,7 +11,7 @@ import javax.annotation.Nullable;
 import java.util.Collection;
 
 public interface IPowerNetwork<T extends Level> {
-  double DEFAULT_TIME_STEP = 1.0 / 20.0;
+  double DEFAULT_TIME_STEP = 1.0 / 60.0;
 
   IPBSolver getSolver();
   @Nullable T getLevel();
