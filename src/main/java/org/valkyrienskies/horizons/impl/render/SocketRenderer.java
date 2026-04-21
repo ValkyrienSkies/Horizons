@@ -24,7 +24,7 @@ public class SocketRenderer {
   }
 
   public interface ISocketRenderer {
-    void render(PoseStack poseStack, VertexConsumer vc, ISocket socket);
+    void render(PoseStack poseStack, VertexConsumer vc, ISocket socket, double partialTick);
   }
 
   public boolean isHighlighted(ISocket socket) {
@@ -38,21 +38,23 @@ public class SocketRenderer {
     double camX,
     double camY,
     double camZ,
-    MultiBufferSource.BufferSource bufferSource
+    MultiBufferSource.BufferSource bufferSource,
+    double partialTick
   ) {
     poseStack.translate(-camX + (double)pos.getX(), -camY + (double)pos.getY(), -camZ + (double)pos.getZ());
     be.getSockets().forEach(it -> {
-      render(it, poseStack, bufferSource);
+      render(it, poseStack, bufferSource, partialTick);
     });
   }
 
   private void render(
     ISocket socket,
     PoseStack poseStack,
-    MultiBufferSource.BufferSource bufferSource
+    MultiBufferSource.BufferSource bufferSource,
+    double partialTick
   ) {
     try {
-      this.rendererCache.get(socket, socket::createRenderer).render(poseStack, bufferSource.getBuffer(RenderType.cutout()), socket);
+      this.rendererCache.get(socket, socket::createRenderer).render(poseStack, bufferSource.getBuffer(RenderType.cutout()), socket, partialTick);
     } catch (Exception e) {
       //do nothing?
     }
@@ -70,7 +72,7 @@ public class SocketRenderer {
     }
 
     @Override
-    public void render(PoseStack poseStack, VertexConsumer vc, ISocket socket) {
+    public void render(PoseStack poseStack, VertexConsumer vc, ISocket socket, double partialTick) {
 
     }
   }
@@ -92,7 +94,7 @@ public class SocketRenderer {
     }
 
     @Override
-    public void render(PoseStack poseStack, VertexConsumer vc, ISocket socket) {
+    public void render(PoseStack poseStack, VertexConsumer vc, ISocket socket, double partialTick) {
 
     }
   }

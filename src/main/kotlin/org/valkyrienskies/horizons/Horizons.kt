@@ -2,7 +2,14 @@ package org.valkyrienskies.horizons
 
 import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.Item
+import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Block
+import net.minecraftforge.event.level.LevelEvent
+import net.minecraftforge.event.server.ServerStartingEvent
+import net.minecraftforge.event.server.ServerStoppingEvent
+import net.minecraftforge.eventbus.api.SubscribeEvent
+import net.minecraftforge.fml.DistExecutor
+import net.minecraftforge.fml.ModList
 import net.minecraftforge.fml.common.Mod
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext
@@ -10,18 +17,34 @@ import net.minecraftforge.fml.loading.FMLEnvironment
 import net.minecraftforge.registries.DeferredRegister
 import net.minecraftforge.registries.ForgeRegistries
 import net.minecraftforge.registries.RegistryObject
+import org.valkyrienskies.core.api.world.properties.DimensionId
 import org.valkyrienskies.horizons.content.HorizonsSounds
 import org.valkyrienskies.horizons.content.client.HorizonsClient
-import java.util.logging.Logger
+import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork
+import org.valkyrienskies.horizons.potato_battery.impl.PowerNetworkServer
+import org.valkyrienskies.horizons.potato_battery.impl.client.PowerNetworkClient
+import org.valkyrienskies.mod.common.dimensionId
+import org.valkyrienskies.mod.util.logger
+import kotlin.concurrent.thread
 
 @Mod("horizons")
-class Horizons {
+object Horizons {
+
+    const val MOD_ID = "horizons"
+    @JvmField
+    val LOGGER = logger("Microplastics Factory").logger
 
     //Deferred Registries
     private val BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, MOD_ID)
     private val ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MOD_ID)
     private val ENTITIES = DeferredRegister.create(ForgeRegistries.ENTITY_TYPES, MOD_ID)
     private val BLOCK_ENTITIES = DeferredRegister.create(ForgeRegistries.BLOCK_ENTITY_TYPES, MOD_ID)
+
+    var NETWORKS: HashMap<DimensionId, IPowerNetwork<*>> = hashMapOf()
+    var ENGINE: PotatoBatteryTask? = null
+    var engineThread: Thread? = null
+
+    var networkRunning = !FMLEnvironment.dist.isClient
 
     // Put RegistryObjects here:
 
@@ -32,7 +55,7 @@ class Horizons {
 
         HorizonsSounds.register(FMLJavaModLoadingContext.get())
 
-        modEventBus.addListener(::init)
+        modEventBus.addListener(::commonInit)
         if (FMLEnvironment.dist.isClient) {
             modEventBus.addListener(HorizonsClient.Companion::clientInit)
         }
@@ -45,15 +68,41 @@ class Horizons {
         return blockRegistry
     }
 
-    companion object {
-        const val MOD_ID = "horizons"
-        @JvmStatic
-        val LOGGER = Logger.getLogger("Microplastics Factory")
-        @JvmStatic
-        fun init (event: FMLCommonSetupEvent) {
-            // Put anything initialized on forge-side here.
-            //vsApi.physTickEvent.on {
-            //}
+    @JvmStatic
+    fun commonInit (event: FMLCommonSetupEvent) {
+        // Put anything initialized on forge-side here.
+        //vsApi.physTickEvent.on {
+        //}
+    }
+
+    @JvmStatic
+    @SubscribeEvent
+    fun serverInit (event: ServerStartingEvent) {
+        LOGGER.info("The sun is rising...")
+
+        ENGINE = PotatoBatteryTask(NETWORKS, 120) //todo: tps config
+        engineThread = thread(start = true, priority = 7, name = "Potato Battery Thread") {
+            ENGINE!!
         }
+
+        LOGGER.info("...over the Horizon.")
+
+        if (ModList.get().isLoaded("create")) {
+            LOGGER.info("Good morning, Create!")
+        }
+    }
+
+    @JvmStatic
+    @SubscribeEvent
+    fun levelLoaded (event: LevelEvent.Load) {
+        if (!NETWORKS.containsKey((event.level as Level).dimensionId)) {
+            NETWORKS[(event.level as Level).dimensionId] = if (event.level.isClientSide) PowerNetworkClient() else PowerNetworkServer()
+        }
+    }
+
+    @JvmStatic
+    @SubscribeEvent
+    fun serverStop (event: ServerStoppingEvent) {
+        ENGINE?.killTask = true
     }
 }

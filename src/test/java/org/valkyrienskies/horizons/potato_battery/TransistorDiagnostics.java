@@ -226,7 +226,7 @@ public final class TransistorDiagnostics {
 
   private static void settle(PowerNetworkServer network, int stepsPerPoint) {
     for (int i = 0; i < stepsPerPoint; i++) {
-      network.physTick();
+      network.energyTick();
     }
   }
 

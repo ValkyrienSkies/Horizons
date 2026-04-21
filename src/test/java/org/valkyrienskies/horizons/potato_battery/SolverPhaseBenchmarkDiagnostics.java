@@ -78,7 +78,7 @@ public final class SolverPhaseBenchmarkDiagnostics {
   ) {
     PowerNetworkServer network = factory.create(solver);
     for (int i = 0; i < 6; i++) {
-      network.physTick();
+      network.energyTick();
     }
 
     long wallNanos = 0L;

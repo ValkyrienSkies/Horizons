@@ -70,7 +70,7 @@ class PowerSolverTest {
     connectBidirectional(source, 0, resistorA, 0, WIRE_RESISTANCE);
     connectBidirectional(resistorA, 1, resistorB, 0, WIRE_RESISTANCE);
     connectBidirectional(resistorB, 1, ground, 0, WIRE_RESISTANCE);
-    network.physTick();
+    network.energyTick();
 
     double expectedCurrent = SUPPLY_VOLTAGE / (200.0 + 3.0 * WIRE_RESISTANCE);
     double expectedMidpoint = expectedCurrent * (100.0 + WIRE_RESISTANCE);
@@ -95,7 +95,7 @@ class PowerSolverTest {
     connectBidirectional(battery, 0, load, 0, WIRE_RESISTANCE);
     connectBidirectional(load, 1, ground, 0, WIRE_RESISTANCE);
     connectBidirectional(battery, 1, ground, 0, WIRE_RESISTANCE);
-    network.physTick();
+    network.energyTick();
 
     double expectedCurrent = SUPPLY_VOLTAGE / (5.0 + 3.0 * WIRE_RESISTANCE);
     assertEquals(expectedCurrent, network.getCurrentOver(battery, load, 0, 0), CURRENT_TOLERANCE);
@@ -166,9 +166,9 @@ class PowerSolverTest {
     PowerNetworkServer network = runCircuit(solver, source, load, ground);
     int solvesAfterFirstTick = solver.callCount();
 
-    network.physTick();
+    network.energyTick();
     int solvesAfterSecondTick = solver.callCount();
-    network.physTick();
+    network.energyTick();
 
     assertEquals(1, solvesAfterFirstTick, solverName + " should solve the static network on the first tick");
     assertEquals(2, solvesAfterSecondTick, solverName + " should perform one settling solve before sleeping");
@@ -195,7 +195,7 @@ class PowerSolverTest {
     connectBidirectional(series, 1, diode, 0, WIRE_RESISTANCE);
     connectBidirectional(diode, 1, ground, 0, WIRE_RESISTANCE);
 
-    network.physTick();
+    network.energyTick();
 
     assertTrue(solver.lastRequestedSubSteps() > 1,
         solverName + " nonlinear network should request internal transient substeps");
@@ -220,11 +220,11 @@ class PowerSolverTest {
     connectBidirectional(source, 1, ground, 0, WIRE_RESISTANCE);
 
     for (int i = 0; i < 12; i++) {
-      network.physTick();
+      network.energyTick();
     }
     int solvesAfterSettling = solver.callCount();
 
-    network.physTick();
+    network.energyTick();
 
     assertEquals(solvesAfterSettling, solver.callCount(),
         solverName + " settled dynamic-linear network should sleep until something changes");
@@ -248,13 +248,13 @@ class PowerSolverTest {
     connectBidirectional(load, 1, ground, 0, WIRE_RESISTANCE);
     connectBidirectional(source, 1, ground, 0, WIRE_RESISTANCE);
 
-    network.physTick();
-    network.physTick();
-    network.physTick();
+    network.energyTick();
+    network.energyTick();
+    network.energyTick();
     int solvesBeforeChange = solver.callCount();
 
     source.setVoltage(3.0);
-    network.physTick();
+    network.energyTick();
 
     assertTrue(solver.callCount() > solvesBeforeChange,
         solverName + " sleeping network should wake and solve after source voltage changes");
@@ -279,7 +279,7 @@ class PowerSolverTest {
     connectBidirectional(series, 1, diode, 0, WIRE_RESISTANCE);
     connectBidirectional(diode, 1, ground, 0, WIRE_RESISTANCE);
     for (int i = 0; i < 20; i++) {
-      network.physTick();
+      network.energyTick();
     }
 
     double vd = network.getVoltageAt(diode, 0) - network.getVoltageAt(diode, 1);
@@ -311,7 +311,7 @@ class PowerSolverTest {
     connectBidirectional(series, 1, diode, 1, WIRE_RESISTANCE);
     connectBidirectional(diode, 0, ground, 0, WIRE_RESISTANCE);
     for (int i = 0; i < 20; i++) {
-      network.physTick();
+      network.energyTick();
     }
 
     double id = Math.abs(network.getCurrentOver(series, diode, 1, 1));
@@ -343,7 +343,7 @@ class PowerSolverTest {
     connectBidirectional(q, 2, ground, 0, WIRE_RESISTANCE);
 
     for (int i = 0; i < 50; i++) {
-      network.physTick();
+      network.energyTick();
     }
 
     double vbe = network.getVoltageAt(q, 0) - network.getVoltageAt(q, 2);
@@ -382,7 +382,7 @@ class PowerSolverTest {
     connectBidirectional(rb, 1, q, 0, WIRE_RESISTANCE);
 
     for (int i = 0; i < 50; i++) {
-      network.physTick();
+      network.energyTick();
     }
 
     double veb = network.getVoltageAt(q, 2) - network.getVoltageAt(q, 0);
@@ -419,7 +419,7 @@ class PowerSolverTest {
     connectBidirectional(m, 2, ground, 0, WIRE_RESISTANCE);
 
     for (int i = 0; i < 20; i++) {
-      network.physTick();
+      network.energyTick();
     }
 
     double vd = network.getVoltageAt(m, 0);
@@ -454,7 +454,7 @@ class PowerSolverTest {
     connectBidirectional(m, 2, ground, 0, WIRE_RESISTANCE);
 
     for (int i = 0; i < 20; i++) {
-      network.physTick();
+      network.energyTick();
     }
 
     double vd = network.getVoltageAt(m, 0);
@@ -486,7 +486,7 @@ class PowerSolverTest {
     connectBidirectional(vg, 0, m, 1, WIRE_RESISTANCE);
 
     for (int i = 0; i < 20; i++) {
-      network.physTick();
+      network.energyTick();
     }
 
     double vsg = network.getVoltageAt(m, 2) - network.getVoltageAt(m, 1);
@@ -566,7 +566,7 @@ class PowerSolverTest {
 
     double maxAbsVoltage = 0.0;
     for (int i = 0; i < 600; i++) {
-      network.physTick();
+      network.energyTick();
 
       maxAbsVoltage = Math.max(maxAbsVoltage, Math.abs(network.getVoltageAt(q1, 1)));
       maxAbsVoltage = Math.max(maxAbsVoltage, Math.abs(network.getVoltageAt(q2, 1)));
@@ -586,7 +586,7 @@ class PowerSolverTest {
 
     connectBidirectional(source, 0, load, 0, WIRE_RESISTANCE);
     connectBidirectional(load, 1, ground, 0, WIRE_RESISTANCE);
-    network.physTick();
+    network.energyTick();
     return network;
   }
 
@@ -609,11 +609,11 @@ class PowerSolverTest {
     }
     connectBidirectional(resistors[sections - 1], 1, ground, 0, WIRE_RESISTANCE);
 
-    network.physTick();
+    network.energyTick();
 
     long start = System.nanoTime();
     for (int i = 0; i < iterations; i++) {
-      network.physTick();
+      network.energyTick();
     }
     long elapsed = System.nanoTime() - start;
 
@@ -664,11 +664,11 @@ class PowerSolverTest {
       }
     }
 
-    network.physTick();
+    network.energyTick();
 
     long start = System.nanoTime();
     for (int i = 0; i < iterations; i++) {
-      network.physTick();
+      network.energyTick();
     }
     long elapsed = System.nanoTime() - start;
 

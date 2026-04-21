@@ -279,11 +279,11 @@ public final class ComponentBenchmarkDiagnostics {
 
   private static BenchmarkResult benchmarkNetwork(PowerNetworkServer network, int iterations, int nodeCount) {
     for (int i = 0; i < 8; i++) {
-      network.physTick();
+      network.energyTick();
     }
     long start = System.nanoTime();
     for (int i = 0; i < iterations; i++) {
-      network.physTick();
+      network.energyTick();
     }
     long elapsed = System.nanoTime() - start;
     double averageMicros = (double) elapsed / iterations / TimeUnit.MICROSECONDS.toNanos(1);

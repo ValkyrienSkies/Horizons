@@ -255,7 +255,7 @@ public final class CircuitVisualizer {
       synchronized (stateLock) {
         time += scenario.timeStep();
         scenario.beforeStep(time);
-        network.physTick();
+        network.energyTick();
         scenario.afterStep(time, network);
         for (int i = 0; i < traces.size(); i++) {
           Deque<Double> history = histories.get(i);

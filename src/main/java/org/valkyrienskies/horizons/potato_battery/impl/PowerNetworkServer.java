@@ -1,8 +1,10 @@
 package org.valkyrienskies.horizons.potato_battery.impl;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraftforge.fml.loading.FMLEnvironment;
 import org.valkyrienskies.core.api.world.PhysLevel;
 import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork;
 import org.valkyrienskies.horizons.potato_battery.api.network.IPBSolver;
@@ -32,9 +34,6 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
   private static final double NONLINEAR_LOW_MOTION_CURRENT_DELTA = 0.002;
   private static final int NONLINEAR_SETTLED_TICKS_TO_DECREASE = 3;
 
-  private final @Nullable ServerLevel level;
-  private final @Nullable PhysLevel physLevel;
-
   private final IPBSolver solver;
 
   private final Long2ObjectOpenHashMap<IPowerNode> nodes = new Long2ObjectOpenHashMap<>();
@@ -60,31 +59,23 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
   private boolean lastSolveFailed;
   private int settleConfirmationSolvesRemaining = 1;
 
-  public PowerNetworkServer(@Nullable ServerLevel level, @Nullable PhysLevel physLevel) {
-    this(level, physLevel, new JKLUSolver());
+  private boolean loaded = false;
+
+  public PowerNetworkServer() {
+    this(new JKLUSolver());
   }
 
-  public PowerNetworkServer(@Nullable ServerLevel level, @Nullable PhysLevel physLevel, IPBSolver solver) {
-    this.level = level;
-    this.physLevel = physLevel;
+  public PowerNetworkServer(IPBSolver solver) {
     this.solver = solver;
+  }
+
+  public void markLoaded() {
+      loaded = true;
   }
 
   @Override
   public IPBSolver getSolver() {
     return solver;
-  }
-
-  @Override
-  @Nullable
-  public ServerLevel getLevel() {
-    return level;
-  }
-
-  @Override
-  @Nullable
-  public PhysLevel getPhysLevel() {
-    return physLevel;
   }
 
   @Override
@@ -108,12 +99,21 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
   }
 
   @Override
-  public void tick() {
+  public void tick(ServerLevel level) {
 
   }
 
   @Override
-  public void physTick() {
+  public void physTick(PhysLevel physLevel) {
+
+  }
+
+  @Override
+  public void energyTick(double timeStep) {
+      if (!loaded) {
+          return;
+      }
+
     boolean hadQueuedChanges = !updateQueue.isEmpty();
     updateQueue.forEach(change -> {
       if (change.node == null) {
@@ -188,7 +188,7 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
     updateAdaptiveNonlinearSubsteps(simulationPolicy, solveFeedback);
   }
 
-  @Override
+    @Override
   public void onChunkUnloaded() {
 
   }

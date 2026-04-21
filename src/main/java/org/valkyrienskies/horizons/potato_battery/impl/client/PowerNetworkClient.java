@@ -1,7 +1,9 @@
 package org.valkyrienskies.horizons.potato_battery.impl.client;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraftforge.fml.loading.FMLEnvironment;
 import org.valkyrienskies.core.api.world.PhysLevel;
 import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork;
 import org.valkyrienskies.horizons.potato_battery.api.network.IPBSolver;
@@ -13,24 +15,11 @@ import java.util.Collection;
 import java.util.List;
 
 public class PowerNetworkClient implements IPowerNetwork<ClientLevel> {
-  private final ClientLevel level;
 
-  public PowerNetworkClient(ClientLevel level) {
-    this.level = level;
-  }
+  public PowerNetworkClient() {}
 
   @Override
   public IPBSolver getSolver() {
-    return null;
-  }
-
-  @Override
-  public ClientLevel getLevel() {
-    return level;
-  }
-
-  @Override
-  public PhysLevel getPhysLevel() {
     return null;
   }
 
@@ -55,16 +44,21 @@ public class PowerNetworkClient implements IPowerNetwork<ClientLevel> {
   }
 
   @Override
-  public void tick() {
+  public void tick(ClientLevel level) {
 
   }
 
   @Override
-  public void physTick() {
+  public void physTick(PhysLevel physLevel) {
 
   }
 
   @Override
+  public void energyTick(double timeStep) {
+
+  }
+
+    @Override
   public void onChunkUnloaded() {
 
   }

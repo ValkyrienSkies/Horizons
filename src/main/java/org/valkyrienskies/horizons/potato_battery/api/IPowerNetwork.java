@@ -14,16 +14,15 @@ public interface IPowerNetwork<T extends Level> {
   double DEFAULT_TIME_STEP = 1.0 / 60.0;
 
   IPBSolver getSolver();
-  @Nullable T getLevel();
-  @Nullable PhysLevel getPhysLevel();
   Collection<IPowerNode> getNodes();
   double getTimeStepSeconds();
 
   void addNode(BlockPos pos, IPowerNode node);
   void removeNode(BlockPos pos);
 
-  void tick();
-  void physTick();
+  void tick(T level);
+  void physTick(PhysLevel physLevel);
+  void energyTick(double timeStep);
 
   void onChunkUnloaded();
   void onChunkLoaded();

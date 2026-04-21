@@ -61,7 +61,7 @@ public final class AstableSpikeDiagnostics {
     try {
       for (int step = 0; step < steps; step++) {
         stepStats.reset();
-        circuit.network.physTick();
+        circuit.network.energyTick();
         double time = (step + 1) * TIME_STEP;
         double vc1 = circuit.network.getVoltageAt(circuit.q1, 1);
         double vc2 = circuit.network.getVoltageAt(circuit.q2, 1);

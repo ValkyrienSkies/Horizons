@@ -159,7 +159,7 @@ public final class PowerNetworkVisualizer {
         ticks++;
         batteryVoltage = 7.5 + Math.sin(ticks * 0.05) * 2.5;
         battery.setVoltage(batteryVoltage);
-        network.physTick();
+        network.energyTick();
         sourceCurrent = Math.abs(network.getCurrentOver(battery, sourceBus, 0, 0));
         centerVoltage = averageVoltage(grid[GRID_WIDTH / 2][GRID_HEIGHT / 2]);
       }
