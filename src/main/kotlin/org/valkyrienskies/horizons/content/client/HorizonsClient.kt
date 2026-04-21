@@ -2,7 +2,7 @@ package org.valkyrienskies.horizons.content.client
 
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent
 
-class HorizonsModClient {
+class HorizonsClient {
     companion object {
         @JvmStatic
         fun clientInit(event: FMLClientSetupEvent) {

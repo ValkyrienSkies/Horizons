@@ -1,0 +1,47 @@
+{
+  "plug": {
+    "subtitle": "sounds.horizons.plug",
+    "sounds": [
+      "horizons:plug"
+    ]
+  },
+  "unplug": {
+    "subtitle": "sounds.horizons.unplug",
+    "sounds": [
+      "horizons:unplug"
+    ]
+  },
+  "click_in": {
+    "subtitle": "sounds.horizons.click_in",
+    "sounds": [
+      "horizons:click_in"
+    ]
+  },
+  "switch_on": {
+    "subtitle": "sounds.horizons.switch_on",
+    "sounds": [
+      "horizons:switch_on"
+    ]
+  },
+  "switch_off": {
+    "subtitle": "sounds.horizons.switch_off",
+    "sounds": [
+      "horizons:switch_off"
+    ]
+  },
+  "short": {
+    "subtitle": "sounds.horizons.short",
+    "sounds": [
+      "horizons:short"
+    ]
+  },
+  "plug_zap": {
+    "subtitle": "sounds.horizons.plug_zap",
+    "sounds": [
+      "horizons:plug_zap_1",
+      "horizons:plug_zap_2",
+      "horizons:plug_zap_3",
+      "horizons:plug_zap_4"
+    ]
+  }
+}

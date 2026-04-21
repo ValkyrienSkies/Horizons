@@ -8,6 +8,10 @@ import org.valkyrienskies.horizons.api.devices.components.ISocket
 import org.valkyrienskies.horizons.api.devices.components.SocketedBlockEntity
 
 class DeviceBlockEntity(type: BlockEntityType<*>, pos: BlockPos, blockState: BlockState) : BlockEntity(type, pos, blockState), SocketedBlockEntity {
+    override fun getSockets(): List<ISocket?>? {
+        TODO("Not yet implemented")
+    }
+
     override fun getSocket(port: Int): ISocket? {
         TODO("Not yet implemented")
     }
