@@ -68,15 +68,15 @@ public abstract class MixinPlayer extends LivingEntity implements PlayerGrabbing
                 return;
             }
             ServerLevel level = (ServerLevel) this.level();
-            LoadedServerShip object = ValkyrienSkies.getShipWorld(level).getLoadedShips().getById(horizons$grabbedObjectId);
+            LoadedServerShip object = (LoadedServerShip) ValkyrienSkies.getShipWorld(level).getLoadedShips().getById(horizons$grabbedObjectId);
 
             if (object != null) {
                 GrabbedObjectTarget target = getGrabbedObjectTarget();
                 Vector3dc targetPos = getBaseTargetPos();
-                if (target.position) {
-                    targetPos = targetPos.add(target.position, new Vector3d());
-                }
-                Vector3dc targetRot = get
+//                if (target.position) {
+//                    targetPos = targetPos.add(target.position, new Vector3d());
+//                }
+//                Vector3dc targetRot = getTar
             } else {
                 tryGrab(-1);
             }
