@@ -4,6 +4,8 @@
   "refmap": "mixins.horizons.refmap.json",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
+    "MixinEntityShipCollisionUtils",
+    "MixinPlayer"
   ],
   "client": [
     "client.MixinLevelRenderer",

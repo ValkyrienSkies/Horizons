@@ -1,5 +1,6 @@
 package org.valkyrienskies.horizons
 
+import net.minecraft.server.MinecraftServer
 import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.Item
 import net.minecraft.world.level.Level
@@ -18,11 +19,13 @@ import net.minecraftforge.registries.DeferredRegister
 import net.minecraftforge.registries.ForgeRegistries
 import net.minecraftforge.registries.RegistryObject
 import org.valkyrienskies.core.api.world.properties.DimensionId
+import org.valkyrienskies.horizons.api.foundation.mixin.PlayerGrabbingMixinDuck
 import org.valkyrienskies.horizons.content.HorizonsSounds
 import org.valkyrienskies.horizons.content.client.HorizonsClient
 import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork
 import org.valkyrienskies.horizons.potato_battery.impl.PowerNetworkServer
 import org.valkyrienskies.horizons.potato_battery.impl.client.PowerNetworkClient
+import org.valkyrienskies.mod.api.vsApi
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.util.logger
 import kotlin.concurrent.thread
@@ -71,8 +74,6 @@ object Horizons {
     @JvmStatic
     fun commonInit (event: FMLCommonSetupEvent) {
         // Put anything initialized on forge-side here.
-        //vsApi.physTickEvent.on {
-        //}
     }
 
     @JvmStatic
@@ -95,8 +96,15 @@ object Horizons {
     @JvmStatic
     @SubscribeEvent
     fun levelLoaded (event: LevelEvent.Load) {
+        val level = event.level as Level
         if (!NETWORKS.containsKey((event.level as Level).dimensionId)) {
             NETWORKS[(event.level as Level).dimensionId] = if (event.level.isClientSide) PowerNetworkClient() else PowerNetworkServer()
+        }
+
+        vsApi.physTickEvent.on { physTickEvent ->
+            level.players().forEach { player ->
+                (player as PlayerGrabbingMixinDuck).physTick(physTickEvent.world)
+            }
         }
     }
 
