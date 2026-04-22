@@ -1,6 +1,7 @@
 package org.valkyrienskies.horizons.mixin;
 
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.HumanoidArm;
@@ -23,6 +24,8 @@ import org.valkyrienskies.core.api.ships.LoadedServerShip;
 import org.valkyrienskies.core.api.world.PhysLevel;
 import org.valkyrienskies.horizons.api.foundation.mixin.GrabbedObjectTarget;
 import org.valkyrienskies.horizons.api.foundation.mixin.PlayerGrabbingMixinDuck;
+import org.valkyrienskies.horizons.api.foundation.networking.server_to_client.ClientboundObjectGrabPacket;
+import org.valkyrienskies.horizons.content.HorizonsNetworking;
 import org.valkyrienskies.mod.api.EntityPhysicsListener;
 import org.valkyrienskies.mod.api.ValkyrienSkies;
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod;
@@ -32,24 +35,38 @@ import org.valkyrienskies.mod.common.util.VectorConversionsMCKt;
 @Mixin(Player.class)
 public abstract class MixinPlayer extends LivingEntity implements PlayerGrabbingMixinDuck {
     @Unique
-    private static final double HORIZONS_GRAB_POS_KP = 12.0;
+    private static final double HORIZONS_GRAB_POS_KP = 48.0;
     @Unique
-    private static final double HORIZONS_GRAB_POS_KD = 6.5;
+    private static final double HORIZONS_GRAB_POS_KD = 12.0;
     @Unique
-    private static final double HORIZONS_GRAB_MAX_ACCEL = 18.0;
+    private static final double HORIZONS_GRAB_MAX_ACCEL = 220.0;
     @Unique
-    private static final double HORIZONS_GRAB_ROT_KP = 10.0;
+    private static final double HORIZONS_GRAB_GRAVITY_COMPENSATION = 12.0;
     @Unique
-    private static final double HORIZONS_GRAB_ROT_KD = 5.0;
+    private static final double HORIZONS_GRAB_ROT_KP = 32.0;
     @Unique
-    private static final double HORIZONS_GRAB_MAX_ANGULAR_ACCEL = 10.0;
+    private static final double HORIZONS_GRAB_ROT_KD = 10.0;
+    @Unique
+    private static final double HORIZONS_GRAB_MAX_ANGULAR_ACCEL = 90.0;
     @Unique
     long horizons$grabbedObjectId = -1L;
     @Unique
     GrabbedObjectTarget horizons$grabbedObjectTarget = new GrabbedObjectTarget();
+    @Unique
+    boolean horizons$grabMode = true;
 
     protected MixinPlayer(EntityType<? extends LivingEntity> entityType, Level level) {
         super(entityType, level);
+    }
+
+    @Override
+    public boolean inGrabMode() {
+        return horizons$grabMode;
+    }
+
+    @Override
+    public void toggleGrabMode() {
+        horizons$grabMode = !horizons$grabMode;
     }
 
     @Override
@@ -59,21 +76,42 @@ public abstract class MixinPlayer extends LivingEntity implements PlayerGrabbing
             this.horizons$grabbedObjectId = -1L;
             this.horizons$grabbedObjectTarget = new GrabbedObjectTarget();
             if (!level.isClientSide) {
-
+                HorizonsNetworking.sendToClient(new ClientboundObjectGrabPacket(-1L), (ServerPlayer) (Object) this);
             }
         }
         if (horizons$grabbedObjectId > -1L) {
-            //try drop
+            horizons$grabbedObjectId = -1L;
+            this.horizons$grabbedObjectTarget = new GrabbedObjectTarget();
+            return true;
         } else {
-
-
+            horizons$grabbedObjectId = id;
+            return true;
         }
-        return false;
+    }
+
+    @Override
+    public boolean tryThrow(long id) {
+        if (id != horizons$grabbedObjectId) {
+            return false;
+        }
+        if (this.level().isClientSide) {
+            return false;
+        }
+        ServerLevel level = (ServerLevel) this.level();
+        LoadedServerShip object = ValkyrienSkies.getShipWorld(level.getServer()).getLoadedShips().getById(horizons$grabbedObjectId);
+        this.horizons$grabbedObjectId = -1L;
+        this.horizons$grabbedObjectTarget = new GrabbedObjectTarget();
+        if (object != null) {
+            GameToPhysicsAdapter gtpa = ValkyrienSkiesMod.getOrCreateGTPA(ValkyrienSkies.getDimensionId(level));
+            Vector3dc force = VectorConversionsMCKt.toJOML(this.getViewVector(0f).normalize().scale(500.0 * object.getInertiaData().getMass()));
+            gtpa.applyWorldForce(object.getId(), force, null);
+        }
+        return true;
     }
 
     @Unique
     private Vector3dc getBaseTargetPos() {
-        return VectorConversionsMCKt.toJOML(this.getEyePosition().add(this.getViewVector(0f)));
+        return VectorConversionsMCKt.toJOML(this.getEyePosition().add(this.getViewVector(0f).normalize().scale(this.horizons$grabbedObjectTarget.distance)));
     }
 
     @Inject(method = "tick", at = @At("TAIL"))
@@ -132,7 +170,8 @@ public abstract class MixinPlayer extends LivingEntity implements PlayerGrabbing
     }
 
     @Override
-    public void setGrabbedObjectTarget(@Nullable Vector3dc position, @Nullable Quaterniondc rotation) {
+    public void setGrabbedObjectTarget(double distance, @Nullable Vector3dc position, @Nullable Quaterniondc rotation) {
+        this.horizons$grabbedObjectTarget.distance = (distance >= 0.0) ? distance : horizons$grabbedObjectTarget.distance;
         this.horizons$grabbedObjectTarget.position = (position != null) ? position : horizons$grabbedObjectTarget.position;
         this.horizons$grabbedObjectTarget.rotation = (rotation != null) ? rotation : horizons$grabbedObjectTarget.rotation;
     }
@@ -143,6 +182,7 @@ public abstract class MixinPlayer extends LivingEntity implements PlayerGrabbing
         Vector3d desiredAcceleration = positionError.mul(HORIZONS_GRAB_POS_KP, new Vector3d())
             .sub(object.getVelocity().mul(HORIZONS_GRAB_POS_KD, new Vector3d()));
         horizons$clampMagnitude(desiredAcceleration, HORIZONS_GRAB_MAX_ACCEL);
+        desiredAcceleration.add(0.0, HORIZONS_GRAB_GRAVITY_COMPENSATION, 0.0);
         return desiredAcceleration.mul(object.getInertiaData().getMass());
     }
 

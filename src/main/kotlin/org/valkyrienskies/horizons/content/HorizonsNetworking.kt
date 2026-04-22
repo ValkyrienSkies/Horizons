@@ -9,11 +9,11 @@ import net.minecraftforge.network.simple.SimpleChannel
 import org.valkyrienskies.horizons.Horizons
 import org.valkyrienskies.horizons.api.foundation.networking.bi_directional.ObjectGrabPacket
 import org.valkyrienskies.horizons.api.foundation.networking.client_to_server.ObjectGrabAdjustPacket
+import org.valkyrienskies.horizons.api.foundation.networking.server_to_client.ClientboundObjectGrabPacket
 import java.util.Optional
 import java.util.function.Supplier
 
-
-
+@Suppress("INFERRED_INVISIBLE_RETURN_TYPE_WARNING")
 object HorizonsNetworking {
 
     @JvmStatic
@@ -27,13 +27,13 @@ object HorizonsNetworking {
     init {
         var id = 0
         //Client to Server
-        NetworkingChannel.registerMessage<ObjectGrabAdjustPacket>(id++, ObjectGrabAdjustPacket::class.java,
+        NetworkingChannel.registerMessage(id++, ObjectGrabAdjustPacket::class.java,
             ObjectGrabAdjustPacket::encode, ObjectGrabAdjustPacket::decode, ObjectGrabAdjustPacket::handle,
             Optional.of(NetworkDirection.PLAY_TO_SERVER))
 
         NetworkingChannel.registerMessage(id++, ObjectGrabPacket::class.java, ObjectGrabPacket::encode, ObjectGrabPacket::decode, ObjectGrabPacket::handleServer, Optional.of(NetworkDirection.PLAY_TO_SERVER))
         //Server to Client
-        NetworkingChannel.registerMessage(id++, ObjectGrabPacket::class.java, ObjectGrabPacket::encode, ObjectGrabPacket::decode, ObjectGrabPacket::handleClient, Optional.of(NetworkDirection.PLAY_TO_CLIENT)
+        NetworkingChannel.registerMessage(id++, ClientboundObjectGrabPacket::class.java, ClientboundObjectGrabPacket::encode, ClientboundObjectGrabPacket::decode, ClientboundObjectGrabPacket::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT))
 
 
     }
@@ -51,5 +51,10 @@ object HorizonsNetworking {
     @JvmStatic
     fun sendToAllClients(msg: Any) {
         NetworkingChannel.send(PacketDistributor.ALL.noArg(), msg)
+    }
+
+    @JvmStatic
+    fun register() {
+
     }
 }

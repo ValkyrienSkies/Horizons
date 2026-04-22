@@ -17,15 +17,19 @@ import javax.annotation.Nullable;
 import java.util.function.Supplier;
 
 public class ObjectGrabAdjustPacket {
+    public final double newDistance;
     @Nullable
     public final Vector3dc newPosition;
     @Nullable
     public final Quaterniondc newRotation;
 
+    private final boolean hasNewDistance;
     private final boolean hasNewPosition;
     private final boolean hasNewRotation;
 
-    public ObjectGrabAdjustPacket(@Nullable Vector3dc position, @Nullable Quaterniondc rotation) {
+    public ObjectGrabAdjustPacket(double distance, @Nullable Vector3dc position, @Nullable Quaterniondc rotation) {
+        newDistance = distance;
+        hasNewDistance = distance >= 0.0;
         newPosition = position;
         hasNewPosition = position != null;
         newRotation = rotation;
@@ -38,13 +42,17 @@ public class ObjectGrabAdjustPacket {
 
             if (sender != null) {
                 PlayerGrabbingMixinDuck grabber = (PlayerGrabbingMixinDuck) sender;
-                grabber.setGrabbedObjectTarget(packet.newPosition, packet.newRotation);
+                grabber.setGrabbedObjectTarget(packet.newDistance, packet.newPosition, packet.newRotation);
             }
         });
         ctx.get().setPacketHandled(true);
     }
 
     public static void encode(ObjectGrabAdjustPacket packet, FriendlyByteBuf buf) {
+        buf.writeBoolean(packet.hasNewDistance);
+        if (packet.hasNewDistance) {
+            buf.writeDouble(packet.newDistance);
+        }
         buf.writeBoolean(packet.hasNewPosition);
         if (packet.hasNewPosition) {
             assert packet.newPosition != null;
@@ -58,8 +66,13 @@ public class ObjectGrabAdjustPacket {
     }
 
     public static ObjectGrabAdjustPacket decode(FriendlyByteBuf buf) {
+        double distance = -1.0;
         Vector3dc position = null;
         Quaterniondc rotation = null;
+        boolean hasDistance = buf.readBoolean();
+        if (hasDistance) {
+            distance = buf.readDouble();
+        }
         boolean hasPosition = buf.readBoolean();
         if (hasPosition) {
             position = HorizonsUtils.readVector3d(buf);
@@ -68,6 +81,6 @@ public class ObjectGrabAdjustPacket {
         if (hasRotation) {
             rotation = HorizonsUtils.readQuaterniond(buf);
         }
-        return new ObjectGrabAdjustPacket(position, rotation);
+        return new ObjectGrabAdjustPacket(distance, position, rotation);
     }
 }

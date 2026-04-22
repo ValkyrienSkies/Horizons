@@ -20,6 +20,7 @@ import net.minecraftforge.registries.ForgeRegistries
 import net.minecraftforge.registries.RegistryObject
 import org.valkyrienskies.core.api.world.properties.DimensionId
 import org.valkyrienskies.horizons.api.foundation.mixin.PlayerGrabbingMixinDuck
+import org.valkyrienskies.horizons.content.HorizonsNetworking
 import org.valkyrienskies.horizons.content.HorizonsSounds
 import org.valkyrienskies.horizons.content.client.HorizonsClient
 import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork
@@ -74,6 +75,7 @@ object Horizons {
     @JvmStatic
     fun commonInit (event: FMLCommonSetupEvent) {
         // Put anything initialized on forge-side here.
+        HorizonsNetworking.register()
     }
 
     @JvmStatic

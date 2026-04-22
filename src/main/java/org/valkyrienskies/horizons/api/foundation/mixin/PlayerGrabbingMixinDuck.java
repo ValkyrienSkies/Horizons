@@ -9,6 +9,7 @@ import javax.annotation.Nullable;
 
 public interface PlayerGrabbingMixinDuck {
     boolean tryGrab(long id);
+    boolean tryThrow(long id);
     long getGrabbedObjectId();
     void setGrabbedObjectId(long id);
 
@@ -16,5 +17,7 @@ public interface PlayerGrabbingMixinDuck {
 
     GrabbedObjectTarget getGrabbedObjectTarget();
     void setGrabbedObjectTarget(GrabbedObjectTarget target);
-    void setGrabbedObjectTarget(@Nullable Vector3dc position, @Nullable Quaterniondc rotation);
+    void setGrabbedObjectTarget(double distance, @Nullable Vector3dc position, @Nullable Quaterniondc rotation);
+    boolean inGrabMode();
+    void toggleGrabMode();
 }
