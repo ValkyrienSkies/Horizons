@@ -29,6 +29,8 @@ import org.valkyrienskies.mod.api.vsApi
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.util.logger
 import kotlin.concurrent.thread
+import thedarkcolour.kotlinforforge.forge.FORGE_BUS
+import thedarkcolour.kotlinforforge.forge.MOD_BUS
 
 @Mod("horizons")
 object Horizons {
@@ -54,13 +56,11 @@ object Horizons {
     // end of RegistryObjects
 
     init {
-        val modEventBus = FMLJavaModLoadingContext.get().modEventBus
+        HorizonsSounds.register()
 
-        HorizonsSounds.register(FMLJavaModLoadingContext.get())
-
-        modEventBus.addListener(::commonInit)
+        MOD_BUS.addListener(::commonInit)
         if (FMLEnvironment.dist.isClient) {
-            modEventBus.addListener(HorizonsClient.Companion::clientInit)
+            MOD_BUS.addListener(HorizonsClient.Companion::clientInit)
         }
     }
 

@@ -7,6 +7,7 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext
 import net.minecraftforge.registries.DeferredRegister
 import net.minecraftforge.registries.RegistryObject
 import org.valkyrienskies.horizons.Horizons
+import thedarkcolour.kotlinforforge.forge.MOD_BUS
 
 object HorizonsSounds {
     var SOUNDS: DeferredRegister<SoundEvent?> =
@@ -26,9 +27,9 @@ object HorizonsSounds {
         return SOUNDS.register(name, { SoundEvent.createVariableRangeEvent(id!!) })
     }
 
-    fun register(context: FMLJavaModLoadingContext) {
+    fun register() {
         Horizons.LOGGER.info("Registering sounds for " + Horizons.MOD_ID)
-        SOUNDS.register(context.modEventBus)
+        SOUNDS.register(MOD_BUS)
     }
 }
 

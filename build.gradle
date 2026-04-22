@@ -124,7 +124,7 @@ dependencies {
     implementation "com.github.rwl:JKLU:1.0.0"
     compileOnly("org.joml:joml:1.10.4")
     compileOnly("org.joml:joml-primitives:1.10.0")
-    modImplementation "thedarkcolour:kotlinforforge:4.11.0"
+    implementation("thedarkcolour:kotlinforforge:4.11.0")
     // endregion
 
     // Kelvin
