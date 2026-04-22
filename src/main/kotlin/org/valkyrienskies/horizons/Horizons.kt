@@ -60,7 +60,7 @@ object Horizons {
 
         MOD_BUS.addListener(::commonInit)
         if (FMLEnvironment.dist.isClient) {
-            MOD_BUS.addListener(HorizonsClient.Companion::clientInit)
+            MOD_BUS.addListener(HorizonsClient::clientInit)
         }
     }
 

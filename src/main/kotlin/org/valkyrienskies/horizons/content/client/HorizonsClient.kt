@@ -9,18 +9,18 @@ import org.valkyrienskies.horizons.potato_battery.impl.client.PowerNetworkClient
 
 import kotlin.concurrent.thread
 
-class HorizonsClient {
-    companion object {
-        @JvmField
-        val SOCKET_RENDERER = SocketRenderer()
+object HorizonsClient {
+    @JvmField
+    val SOCKET_RENDERER = SocketRenderer()
 
-        @OnlyIn(Dist.CLIENT)
-        @JvmField
-        val CLIENT_NETWORK: PowerNetworkClient = PowerNetworkClient()
+    @OnlyIn(Dist.CLIENT)
+    @JvmField
+    val CLIENT_NETWORK: PowerNetworkClient = PowerNetworkClient()
 
-        @JvmStatic
-        fun clientInit(event: FMLClientSetupEvent) {
-            // Put anything initialized on forge-side client here.
-        }
+
+
+    @JvmStatic
+    fun clientInit(event: FMLClientSetupEvent) {
+        // Put anything initialized on forge-side client here.
     }
 }
