@@ -33,6 +33,7 @@ eclipse
 run
 run_server
 logs
+.kotlin
 
 # Files from Forge MDK
 forge*changelog.txt
