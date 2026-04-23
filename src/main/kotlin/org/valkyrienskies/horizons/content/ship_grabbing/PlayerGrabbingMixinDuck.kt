@@ -21,6 +21,16 @@ import kotlin.math.sqrt
 interface PlayerGrabbingMixinDuck {
     val horizonsGrabbingState: GrabbingState
 
+    companion object {
+        private const val GRAB_POS_KP = 48.0
+        private const val GRAB_POS_KD = 12.0
+        private const val GRAB_MAX_ACCEL = 220.0
+        private const val GRAB_GRAVITY_COMPENSATION = 12.0
+        private const val GRAB_ROT_KP = 32.0
+        private const val GRAB_ROT_KD = 10.0
+        private const val GRAB_MAX_ANGULAR_ACCEL = 90.0
+    }
+
     fun getGrabbedObjectId(): Long = horizonsGrabbingState.grabbedObjectId
 
     fun setGrabbedObjectId(id: Long) {
@@ -153,13 +163,4 @@ interface PlayerGrabbingMixinDuck {
         }
     }
 
-    companion object {
-        private const val GRAB_POS_KP = 48.0
-        private const val GRAB_POS_KD = 12.0
-        private const val GRAB_MAX_ACCEL = 220.0
-        private const val GRAB_GRAVITY_COMPENSATION = 12.0
-        private const val GRAB_ROT_KP = 32.0
-        private const val GRAB_ROT_KD = 10.0
-        private const val GRAB_MAX_ANGULAR_ACCEL = 90.0
-    }
 }
