@@ -1,8 +1,8 @@
 package org.valkyrienskies.horizons.content.client
 
 import net.minecraft.client.Minecraft
-import org.valkyrienskies.horizons.api.foundation.mixin.PlayerGrabbingMixinDuck
 import org.valkyrienskies.horizons.api.foundation.networking.server_to_client.ClientboundObjectGrabPacket
+import org.valkyrienskies.horizons.content.ship_grabbing.PlayerGrabbingMixinDuck
 
 object HorizonsClientPacketHandler {
     @JvmStatic
@@ -10,7 +10,7 @@ object HorizonsClientPacketHandler {
         val player = Minecraft.getInstance().player
         if (player != null) {
             val grabber = player as PlayerGrabbingMixinDuck
-            grabber.grabbedObjectId = packet.grabbedObject
+            grabber.horizonsGrabbingState.grabbedObjectId = packet.grabbedObject
         }
     }
 }

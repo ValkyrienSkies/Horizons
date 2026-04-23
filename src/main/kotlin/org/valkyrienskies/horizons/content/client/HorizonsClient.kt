@@ -14,9 +14,9 @@ import net.minecraftforge.eventbus.api.SubscribeEvent
 import net.minecraftforge.fml.common.Mod
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent
 import org.valkyrienskies.horizons.PotatoBatteryTask
-import org.valkyrienskies.horizons.api.foundation.mixin.PlayerGrabbingMixinDuck
 import org.valkyrienskies.horizons.api.foundation.networking.bi_directional.ObjectGrabPacket
 import org.valkyrienskies.horizons.content.HorizonsNetworking
+import org.valkyrienskies.horizons.content.ship_grabbing.PlayerGrabbingMixinDuck
 import org.valkyrienskies.horizons.impl.render.SocketRenderer
 import org.valkyrienskies.horizons.potato_battery.impl.client.PowerNetworkClient
 import thedarkcolour.kotlinforforge.forge.MOD_BUS
@@ -55,7 +55,7 @@ object HorizonsClient {
                     grabber.toggleGrabMode()
                     if (!grabber.inGrabMode()) {
                         HorizonsNetworking.sendToServer(ObjectGrabPacket(HorizonsClient.localPlayerGrabbed()))
-                        (player as PlayerGrabbingMixinDuck).grabbedObjectId = -1L
+                        (player as PlayerGrabbingMixinDuck).horizonsGrabbingState.grabbedObjectId = -1L
                     }
                 }
             }
@@ -86,7 +86,7 @@ object HorizonsClient {
         val player = Minecraft.getInstance().player
         if (player != null) {
             val grabber = player as PlayerGrabbingMixinDuck
-            toReturn = grabber.grabbedObjectId
+            toReturn = grabber.horizonsGrabbingState.grabbedObjectId
         }
         return toReturn
     }

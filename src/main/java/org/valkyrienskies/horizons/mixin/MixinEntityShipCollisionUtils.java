@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.valkyrienskies.core.api.ships.LoadedShip;
 import org.valkyrienskies.core.api.ships.properties.ShipTransform;
 import org.valkyrienskies.core.internal.collision.VsiConvexPolygonc;
-import org.valkyrienskies.horizons.api.foundation.mixin.PlayerGrabbingMixinDuck;
+import org.valkyrienskies.horizons.content.ship_grabbing.PlayerGrabbingMixinDuck;
 import org.valkyrienskies.mod.common.util.EntityShipCollisionUtils;
 
 import javax.annotation.Nullable;

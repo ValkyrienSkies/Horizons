@@ -8,10 +8,10 @@ import net.minecraftforge.client.event.InputEvent
 import net.minecraftforge.eventbus.api.SubscribeEvent
 import net.minecraftforge.fml.common.Mod
 import org.valkyrienskies.core.api.ships.Ship
-import org.valkyrienskies.horizons.api.foundation.mixin.PlayerGrabbingMixinDuck
 import org.valkyrienskies.horizons.api.foundation.networking.bi_directional.ObjectGrabPacket
 import org.valkyrienskies.horizons.api.foundation.networking.client_to_server.ObjectGrabAdjustPacket
 import org.valkyrienskies.horizons.content.HorizonsNetworking
+import org.valkyrienskies.horizons.content.ship_grabbing.PlayerGrabbingMixinDuck
 import org.valkyrienskies.mod.api.getShipManagingBlock
 import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.toWorldCoordinates
@@ -25,7 +25,7 @@ object HorizonsInputHandler {
                 val player = Minecraft.getInstance().player
                 if (player != null) {
                     val grabber = player as PlayerGrabbingMixinDuck
-                    val newDistance = Mth.clamp(grabber.grabbedObjectTarget.distance + event.scrollDelta, 2.0, 40.0)
+                    val newDistance = Mth.clamp(grabber.horizonsGrabbingState.grabbedObjectTarget.distance + event.scrollDelta, 2.0, 40.0)
                     HorizonsNetworking.sendToServer(ObjectGrabAdjustPacket(newDistance, null, null))
                     event.isCanceled = true
                 }
@@ -45,7 +45,7 @@ object HorizonsInputHandler {
                     //release it
                     HorizonsNetworking.sendToServer(ObjectGrabPacket(HorizonsClient.localPlayerGrabbed()))
                 }
-                (player as PlayerGrabbingMixinDuck).grabbedObjectId = -1L
+                (player as PlayerGrabbingMixinDuck).horizonsGrabbingState.grabbedObjectId = -1L
                 //event.isCanceled = true
             } else if (event.action == 0 && event.button == 1) {
                 val level = Minecraft.getInstance().level
@@ -58,7 +58,7 @@ object HorizonsInputHandler {
                 if (player != null && lastHit != null && shipHit != null && level.toWorldCoordinates(lastHit.location)
                         .distanceTo(player.position()) <= 10.0
                 ) {
-                    (player as PlayerGrabbingMixinDuck).grabbedObjectId = shipHit.id
+                    (player as PlayerGrabbingMixinDuck).horizonsGrabbingState.grabbedObjectId = shipHit.id
                     HorizonsNetworking.sendToServer(ObjectGrabPacket(HorizonsClient.localPlayerGrabbed()))
                 }
                 //event.isCanceled = true

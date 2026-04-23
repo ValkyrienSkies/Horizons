@@ -8,8 +8,8 @@ import net.minecraftforge.network.NetworkEvent;
 import org.joml.Quaterniondc;
 import org.joml.Vector3dc;
 import org.valkyrienskies.horizons.api.foundation.HorizonsUtils;
-import org.valkyrienskies.horizons.api.foundation.mixin.PlayerGrabbingMixinDuck;
 import org.valkyrienskies.horizons.content.client.HorizonsClientPacketHandler;
+import org.valkyrienskies.horizons.content.ship_grabbing.PlayerGrabbingMixinDuck;
 import org.valkyrienskies.mod.api.ValkyrienSkies;
 import org.valkyrienskies.mod.common.networking.VSGamePackets;
 

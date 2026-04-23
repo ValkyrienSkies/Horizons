@@ -3,9 +3,9 @@ package org.valkyrienskies.horizons.api.foundation.networking.bi_directional;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
-import org.valkyrienskies.horizons.api.foundation.mixin.PlayerGrabbingMixinDuck;
 import org.valkyrienskies.horizons.content.HorizonsNetworking;
 import org.valkyrienskies.horizons.api.foundation.networking.server_to_client.ClientboundObjectGrabPacket;
+import org.valkyrienskies.horizons.content.ship_grabbing.PlayerGrabbingMixinDuck;
 
 import java.util.function.Supplier;
 

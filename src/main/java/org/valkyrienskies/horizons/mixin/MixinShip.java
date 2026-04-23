@@ -1,0 +1,33 @@
+package org.valkyrienskies.horizons.mixin;
+
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.valkyrienskies.horizons.content.ship_grabbing.GrabbingState;
+import org.valkyrienskies.horizons.content.ship_grabbing.PlayerGrabbingMixinDuck;
+
+@Mixin(Player.class)
+public abstract class MixinShip extends LivingEntity implements PlayerGrabbingMixinDuck {
+    @Unique
+    private final GrabbingState horizons$grabbingState = new GrabbingState();
+
+    protected MixinShip(EntityType<? extends LivingEntity> entityType, Level level) {
+        super(entityType, level);
+    }
+
+    @Override
+    public GrabbingState getHorizonsGrabbingState() {
+        return horizons$grabbingState;
+    }
+
+    @Inject(method = "tick", at = @At("TAIL"))
+    private void postTick(CallbackInfo ci) {
+        horizonsPostTick();
+    }
+}

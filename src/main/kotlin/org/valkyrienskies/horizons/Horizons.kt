@@ -19,10 +19,10 @@ import net.minecraftforge.registries.DeferredRegister
 import net.minecraftforge.registries.ForgeRegistries
 import net.minecraftforge.registries.RegistryObject
 import org.valkyrienskies.core.api.world.properties.DimensionId
-import org.valkyrienskies.horizons.api.foundation.mixin.PlayerGrabbingMixinDuck
 import org.valkyrienskies.horizons.content.HorizonsNetworking
 import org.valkyrienskies.horizons.content.HorizonsSounds
 import org.valkyrienskies.horizons.content.client.HorizonsClient
+import org.valkyrienskies.horizons.content.ship_grabbing.PlayerGrabbingMixinDuck
 import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork
 import org.valkyrienskies.horizons.potato_battery.impl.PowerNetworkServer
 import org.valkyrienskies.horizons.potato_battery.impl.client.PowerNetworkClient
@@ -103,11 +103,12 @@ object Horizons {
             NETWORKS[(event.level as Level).dimensionId] = if (event.level.isClientSide) PowerNetworkClient() else PowerNetworkServer()
         }
 
-        vsApi.physTickEvent.on { physTickEvent ->
-            level.players().forEach { player ->
-                (player as PlayerGrabbingMixinDuck).physTick(physTickEvent.world)
-            }
-        }
+// Commented it out, because it just calls an empty interface method?
+//        vsApi.physTickEvent.on { physTickEvent ->
+//            level.players().forEach { player ->
+//                (player as PlayerGrabbingMixinDuck).physTick(physTickEvent.world)
+//            }
+//        }
     }
 
     @JvmStatic
