@@ -1,6 +1,6 @@
 # Valkyrien Skies "Don't Just Take It" License
 
-**Copyright (c) 2026, Valkyrien Skies Team. All rights reserved.**
+**Copyright (c) 2026, ThePlasticPotato. All rights reserved.**
 
 This Software is made available under the terms of this License. By
 downloading, installing, using, copying, or interacting with the Software in
@@ -16,7 +16,7 @@ compiled binaries (e.g., `.jar` files), source code, assets, textures, models,
 sounds, configuration files, documentation, and any other materials made
 available by the Licensor under this License.
 
-**"Licensor"** means the Valkyrien Skies Team, the copyright holder of the
+**"Licensor"** means ThePlasticPotato, the copyright holder of the
 Software.
 
 **"You"** (or "Your") means the individual or legal entity exercising rights
