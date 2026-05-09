@@ -48,7 +48,7 @@ worldwide, non-exclusive, non-transferable, royalty-free, revocable license
 to:
 
   **(a) Personal Use.** Download, install, and use the Software for Your own
-  personal, non-commercial gameplay, including on private servers You operate
+  personal gameplay, including on private servers You operate
   or participate in.
 
   **(b) Study.** Read and study the Software's source code (where made
@@ -112,25 +112,20 @@ Except as expressly permitted by Sections 2, 3, or 6, You may NOT:
   own machine, and (ii) for the purpose of preparing a Contribution to be
   submitted to the Licensor.
 
-  **(d)** Bundle, repackage, or include the Software (in whole or in
-  substantial part) within any modpack, distribution, launcher, server pack,
-  or other compilation, regardless of whether the compilation is offered for
-  free or for a fee, without the Licensor's prior written permission.
-
-  **(e)** Remove, alter, obscure, or replace any copyright notice, license
+  **(d)** Remove, alter, obscure, or replace any copyright notice, license
   notice, attribution, or branding contained in the Software.
 
-  **(f)** Reverse engineer, decompile, or disassemble the Software, except
+  **(e)** Reverse engineer, decompile, or disassemble the Software, except
   (i) strictly to the extent necessary to develop an Independent Module
   under Section 3, or (ii) to the extent such restriction is prohibited by
   applicable law.
 
-  **(g)** Use the Software, or any portion of it, as training data, input,
+  **(f)** Use the Software, or any portion of it, as training data, input,
   or evaluation material for a machine-learning model, or for any other form
   of automated content generation, without the Licensor's prior written
   permission.
 
-  **(h)** Use the Licensor's name, logo, or trademarks to endorse or promote
+  **(g)** Use the Licensor's name, logo, or trademarks to endorse or promote
   any product without the Licensor's prior written permission, except for
   the factual compatibility statements permitted by Section 3(c).
 
