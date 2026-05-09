@@ -1,0 +1,47 @@
+name: Feature Request
+description: Formally request a feature to be added/changed in Horizons
+title: '<title>'
+labels: bug
+assignees: []
+body:
+- type: checkboxes
+  attributes:
+    label: This request is relevant to Horizons, does not already exist within Horizons, and is not a duplicate of an open or closed feature request.
+    options:
+      - label: I have searched for any relevant existing features/requests, and found none
+        required: true
+- type: dropdown
+  attributes:
+    label: Request Type
+    description: What type of feature request is this?
+    options:
+      - label: New Feature
+      - label: Adjustment
+      - label: Integration with Other Mod(s)
+      - label: Other
+  validations:
+    required: true
+- type: dropdown
+  attributes:
+    label: Request Scope
+    description: How small or large would you describe the scope of this request?
+    options:
+      - label: XS
+      - label: S
+      - label: M
+      - label: L
+      - label: XL
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: Request Description
+    description: Describe the desired behavior/feature.
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: Related Projects
+    description: List any related projects or mods that this feature would integrate with, if applicable.
+  validations:
+    required: true
