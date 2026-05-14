@@ -3,8 +3,8 @@
 	"credit": "Made with Blockbench",
 	"texture_size": [32, 32],
 	"textures": {
-		"2": "vsh_wire_anchor",
-		"particle": "vsh_wire_anchor"
+		"2": "horizons:block/vsh_wire_anchor",
+		"particle": "horizons:block/vsh_wire_anchor"
 	},
 	"elements": [
 		{
