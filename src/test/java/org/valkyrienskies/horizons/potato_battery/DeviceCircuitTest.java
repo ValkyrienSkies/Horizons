@@ -7,6 +7,7 @@ import org.valkyrienskies.horizons.potato_battery.api.network.node.IPowerNode;
 import org.valkyrienskies.horizons.potato_battery.impl.nodes.ResistorNode;
 import org.valkyrienskies.horizons.potato_battery.impl.nodes.SwitchNode;
 import org.valkyrienskies.horizons.potato_battery.impl.nodes.VoltageSourceNode;
+import org.valkyrienskies.horizons.potato_battery.impl.nodes.AmmeterNode;
 import org.valkyrienskies.horizons.potato_battery.impl.PowerNetworkServer;
 import org.valkyrienskies.horizons.potato_battery.impl.network.solver.EJMLSolver;
 import org.valkyrienskies.horizons.potato_battery.impl.network.solver.JKLUSolver;
@@ -111,5 +112,39 @@ class DeviceCircuitTest {
   }
   private static void settle(PowerNetworkServer network) {
     for (int i = 0; i < 5; i++) network.energyTick(1.0 / 120);
+  }
+
+  @ParameterizedTest @MethodSource("solvers")
+  void ammeterMeasuresSeriesCurrentWithoutChangingLoadAndReportsReversedPolarity(IPBSolver solver) {
+    PowerNetworkServer network = new PowerNetworkServer(solver);
+    network.markLoaded();
+    VoltageSourceNode battery = new VoltageSourceNode(12);
+    ResistorNode load = new ResistorNode(10);
+    AmmeterNode meter = new AmmeterNode();
+    network.addNode(battery);
+    network.addNode(load);
+    network.addNode(meter);
+    network.updateTopology(() -> {
+      connect(battery, 0, meter, 0);
+      connect(meter, 1, load, 0);
+      connect(load, 1, battery, 1);
+    });
+    settle(network);
+    double expected = 12 / (10 + 3e-6);
+    assertEquals(expected, meter.getCurrent(network), 1e-5);
+    assertEquals(0, network.getVoltageBetween(meter, 0, meter, 1), 1e-6);
+    assertEquals(12, network.getVoltageBetween(battery, 0, battery, 1), 1e-5);
+    assertEquals(-12, network.getVoltageBetween(battery, 1, battery, 0), 1e-5);
+    network.updateTopology(() -> {
+      battery.removeAllConnections(); meter.removeAllConnections(); load.removeAllConnections();
+      connect(battery, 0, meter, 1);
+      connect(meter, 0, load, 0);
+      connect(load, 1, battery, 1);
+    });
+    settle(network);
+    assertEquals(-expected, meter.getCurrent(network), 1e-5);
+    network.updateTopology(() -> { battery.removeAllConnections(); meter.removeAllConnections(); load.removeAllConnections(); });
+    settle(network);
+    assertEquals(0, meter.getCurrent(network), 1e-7);
   }
 }

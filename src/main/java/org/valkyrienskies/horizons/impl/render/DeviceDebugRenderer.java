@@ -23,7 +23,7 @@ public final class DeviceDebugRenderer {
     if (mc.hitResult instanceof BlockHitResult hit && mc.level.getBlockEntity(hit.getBlockPos()) instanceof SocketedBlockEntity device) {
       var be = mc.level.getBlockEntity(hit.getBlockPos());
       var eye = mc.player.getEyePosition(event.getPartialTick());
-      double reach = mc.player.getAttributeValue(net.minecraftforge.common.ForgeMod.BLOCK_REACH.get()) + 0.5;
+      double reach = mc.player.getBlockReach() + 0.01;
       var end = eye.add(mc.player.getViewVector(event.getPartialTick()).scale(reach));
       var target = SocketTargeting.findLocal(device, SocketRenderSpace.toLocal(be, eye), SocketRenderSpace.toLocal(be, end));
       ((SocketHitProvider) mc).setSocketHit(target);

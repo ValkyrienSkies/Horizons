@@ -16,7 +16,7 @@ class DebugCableItem : Item(Properties().stacksTo(1)) {
         if (level.isClientSide) return InteractionResult.SUCCESS
         val be = level.getBlockEntity(context.clickedPos) ?: return InteractionResult.PASS
         if (be !is IDevice) return InteractionResult.PASS
-        val socket = SocketTargeting.find(be, player.eyePosition, player.eyePosition.add(player.lookAngle.scale(player.getAttributeValue(net.minecraftforge.common.ForgeMod.BLOCK_REACH.get()) + 0.5)))
+        val socket = SocketTargeting.find(be, player.eyePosition, player.eyePosition.add(player.lookAngle.scale(player.blockReach + 0.01)))
         if (socket == null) {
             player.displayClientMessage(Component.translatable("message.horizons.aim_at_socket"), true)
             return InteractionResult.CONSUME

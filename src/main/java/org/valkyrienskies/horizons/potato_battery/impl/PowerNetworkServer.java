@@ -325,6 +325,14 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
   }
 
   @Override
+  public double getVoltageBetween(IPowerNode nodeA, int portA, IPowerNode nodeB, int portB) {
+    var snapshot = publishedNodeEnergyData;
+    NodeEnergyData a = getNodeEnergyData(snapshot, nodeA, portA);
+    NodeEnergyData b = getNodeEnergyData(snapshot, nodeB, portB);
+    return (a == null ? 0 : a.getVoltage()) - (b == null ? 0 : b.getVoltage());
+  }
+
+  @Override
   public NodeEnergyData getNodeEnergyData(IPowerNode node, int port) {
     NodeEnergyData fromSolve = solveThread == Thread.currentThread() ? getNodeEnergyData(stagingNodeEnergyData, node, port) : null;
     if (fromSolve != null) {

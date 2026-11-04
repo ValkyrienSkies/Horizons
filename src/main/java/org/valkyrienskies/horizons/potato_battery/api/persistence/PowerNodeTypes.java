@@ -6,6 +6,7 @@ import org.valkyrienskies.horizons.potato_battery.api.network.node.IPowerNode;
 import org.valkyrienskies.horizons.potato_battery.impl.nodes.ResistorNode;
 import org.valkyrienskies.horizons.potato_battery.impl.nodes.SwitchNode;
 import org.valkyrienskies.horizons.potato_battery.impl.nodes.VoltageSourceNode;
+import org.valkyrienskies.horizons.potato_battery.impl.nodes.AmmeterNode;
 import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Map;
@@ -17,6 +18,7 @@ public final class PowerNodeTypes {
   private static final Map<ResourceLocation, PowerNodeType<?>> BY_ID = new HashMap<>();
   private static final Map<Class<?>, PowerNodeType<?>> BY_CLASS = new HashMap<>();
   static {
+    builtin("ammeter", AmmeterNode.class, tag -> new AmmeterNode(), (node, tag) -> {});
     builtin("resistor", ResistorNode.class, tag -> new ResistorNode(tag.getDouble("Resistance")),
         (node, tag) -> tag.putDouble("Resistance", node.getResistance()));
     builtin("voltage_source", VoltageSourceNode.class, tag -> new VoltageSourceNode(tag.getDouble("Voltage")),

@@ -40,6 +40,8 @@ object HorizonsClient {
         // Put anything initialized on forge-side client here.
         // Kotlin for Forge auto-subscribes Kotlin objects, so register this Java listener explicitly.
         EVENT_BUS.addListener(DeviceDebugRenderer::render)
+        EVENT_BUS.addListener(PDADebugWires::render)
+        EVENT_BUS.addListener(MeasurementOverlay::render)
         EVENT_BUS.register(HorizonsKeybindings)
         EVENT_BUS.register(HorizonsInputHandler)
         EVENT_BUS.addListener(::onClientTick)

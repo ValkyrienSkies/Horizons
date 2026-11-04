@@ -11,5 +11,14 @@
   "message.horizons.cable_removed": "Cable removed.",
   "message.horizons.cable_connected": "Cable connected.",
   "message.horizons.out_of_range": "Sockets must be within 10 blocks when connecting.",
-  "message.horizons.connection_failed": "Unable to connect these sockets."
+  "message.horizons.connection_failed": "Unable to connect these sockets.",
+  "item.horizons.debug_pda": "Debug PDA",
+  "block.horizons.ammeter": "Amp-Meter",
+  "message.horizons.pda_first_probe": "Red probe selected. Choose the blue probe socket.",
+  "message.horizons.pda_voltage": "Voltage (red − blue): %s",
+  "message.horizons.pda_unavailable": "Voltage unavailable: both probe sockets must be loaded in this dimension.",
+  "message.horizons.pda_cleared": "PDA probes cleared.",
+  "tooltip.horizons.debug_pda": "Right-click two sockets to measure voltage (red − blue).",
+  "tooltip.horizons.debug_pda_clear": "Sneak-right-click to clear probes. Click again to start a new measurement.",
+  "hud.horizons.ammeter_current": "Current (0 → 1): %s"
 }

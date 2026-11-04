@@ -11,5 +11,6 @@ object HorizonsBlocks {
     val SWITCH = blocks.register("switch", ::SwitchBlock)
     val RESISTOR = blocks.register("resistor", ::ResistorBlock)
     val LAMP = blocks.register("lamp", ::LampBlock)
+    val AMMETER = blocks.register("ammeter", ::AmmeterBlock)
     fun register() = blocks.register(MOD_BUS)
 }

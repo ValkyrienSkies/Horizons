@@ -13,5 +13,6 @@ object HorizonsBlockEntities {
     val SWITCH = types.register("switch") { BlockEntityType.Builder.of(::SwitchBlockEntity, HorizonsBlocks.SWITCH.get()).build(null) }
     val RESISTOR = types.register("resistor") { BlockEntityType.Builder.of(::ResistorBlockEntity, HorizonsBlocks.RESISTOR.get()).build(null) }
     val LAMP = types.register("lamp") { BlockEntityType.Builder.of(::LampBlockEntity, HorizonsBlocks.LAMP.get()).build(null) }
+    val AMMETER = types.register("ammeter") { BlockEntityType.Builder.of(::AmmeterBlockEntity, HorizonsBlocks.AMMETER.get()).build(null) }
     fun register() = types.register(MOD_BUS)
 }

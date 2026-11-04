@@ -210,6 +210,22 @@ class PowerNetworkArchiveTest {
     assertTrue(restored.attach(LAMP, "test:lamp", -1, () -> new ResistorNode(1.44)).id() > first.id());
   }
 
+  @Test void ammeterTypeAndConnectionsSurviveRestart() throws Exception {
+    PowerNetworkArchive archive = archive(new EJMLSolver());
+    var battery = archive.attach(BATTERY, "test:battery", -1, () -> new VoltageSourceNode(12));
+    var meter = archive.attach(new BlockPos(16, 64, 1), "test:meter", -1, AmmeterNode::new);
+    var load = archive.attach(LAMP, "test:load", -1, () -> new ResistorNode(10));
+    archive.connect(battery.id(), 0, meter.id(), 0, 1e-6);
+    archive.connect(meter.id(), 1, load.id(), 0, 1e-6);
+    archive.connect(load.id(), 1, battery.id(), 1, 1e-6);
+    PowerNetworkArchive restored = archive(new EJMLSolver());
+    restored.read(diskRoundtrip(archive));
+    restored.activateChunk(PowerNetworkArchive.chunkOf(BATTERY));
+    restored.activateChunk(PowerNetworkArchive.chunkOf(LAMP));
+    settle(restored);
+    assertEquals(12 / (10 + 3e-6), ((AmmeterNode) restored.getNetwork().getNode(meter.id())).getCurrent(restored.getNetwork()), 1e-5);
+  }
+
   @Test void entirelyUnloadedCircuitCanRestartWithChunksLoadedInReverseOrder() throws Exception {
     PowerNetworkArchive archive = archive(new EJMLSolver());
     var battery = archive.attach(BATTERY, "test:battery", -1, () -> new VoltageSourceNode(12));

@@ -47,6 +47,11 @@ public interface IPowerNetwork<T extends Level> {
 
   double getVoltageAt(IPowerNode node, int port);
 
+  /** Signed voltage at A relative to B. Server implementations sample a single published solve. */
+  default double getVoltageBetween(IPowerNode nodeA, int portA, IPowerNode nodeB, int portB) {
+    return getVoltageAt(nodeA, portA) - getVoltageAt(nodeB, portB);
+  }
+
   NodeEnergyData getNodeEnergyData(IPowerNode node, int port);
 
   void setNodeEnergyData(IPowerNode node, int port, NodeEnergyData energyData);

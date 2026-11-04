@@ -27,6 +27,7 @@ import net.minecraft.world.phys.shapes.VoxelShape
 import org.valkyrienskies.horizons.api.devices.IDevice
 import org.valkyrienskies.horizons.content.blockentities.*
 import org.valkyrienskies.horizons.content.items.DebugCableItem
+import org.valkyrienskies.horizons.content.items.pda.PDAItem
 
 /* Debug classes. Remove later */
 abstract class ElectricalBlock(properties: BlockBehaviour.Properties = BlockBehaviour.Properties.of().strength(2f).noOcclusion()) : BaseEntityBlock(properties) {
@@ -70,7 +71,7 @@ class SwitchBlock : ElectricalBlock() {
     override fun newBlockEntity(pos: BlockPos, state: BlockState) = SwitchBlockEntity(pos, state)
     override fun getShape(state: BlockState, level: BlockGetter, pos: BlockPos, context: CollisionContext): VoxelShape = rotate(SHAPE, state)
     override fun use(state: BlockState, level: Level, pos: BlockPos, player: Player, hand: InteractionHand, hit: BlockHitResult): InteractionResult {
-        if (player.getItemInHand(hand).item is DebugCableItem) return InteractionResult.PASS
+        if (player.getItemInHand(hand).item is DebugCableItem || player.getItemInHand(hand).item is PDAItem) return InteractionResult.PASS
         if (!level.isClientSide) {
             val closed = !state.getValue(BlockStateProperties.POWERED)
             level.setBlock(pos, state.setValue(BlockStateProperties.POWERED, closed), 3)
@@ -85,6 +86,14 @@ class SwitchBlock : ElectricalBlock() {
 
 class ResistorBlock : ElectricalBlock() {
     override fun newBlockEntity(pos: BlockPos, state: BlockState) = ResistorBlockEntity(pos, state)
+}
+
+class AmmeterBlock : ElectricalBlock() {
+    override fun newBlockEntity(pos: BlockPos, state: BlockState) = AmmeterBlockEntity(pos, state)
+    override fun <T : BlockEntity> getTicker(level: Level, state: BlockState, type: BlockEntityType<T>): BlockEntityTicker<T>? {
+        if (level.isClientSide) return null
+        return createTickerHelper(type, HorizonsBlockEntities.AMMETER.get(), BlockEntityTicker { tickLevel, _, _, meter -> meter.updateReading(tickLevel) })
+    }
 }
 
 class LampBlock : ElectricalBlock(BlockBehaviour.Properties.of().strength(2f).noOcclusion().lightLevel { it.getValue(LIGHT) }) {

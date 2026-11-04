@@ -8,7 +8,8 @@
     "MixinShip"
   ],
   "client": [
-    "client.MixinMinecraft"
+    "client.MixinMinecraft",
+    "client.MixinItemRenderer"
   ],
   "injectors": {
     "defaultRequire": 1
