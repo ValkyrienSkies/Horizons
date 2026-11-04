@@ -42,6 +42,7 @@ object HorizonsClient {
         EVENT_BUS.addListener(DeviceDebugRenderer::render)
         EVENT_BUS.addListener(PDADebugWires::render)
         EVENT_BUS.addListener(MeasurementOverlay::render)
+        EVENT_BUS.addListener(MeasurementOverlay::receiveMessage)
         EVENT_BUS.register(HorizonsKeybindings)
         EVENT_BUS.register(HorizonsInputHandler)
         EVENT_BUS.addListener(::onClientTick)
