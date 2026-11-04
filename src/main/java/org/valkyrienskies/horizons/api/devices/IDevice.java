@@ -30,24 +30,22 @@ public interface IDevice extends SocketedBlockEntity {
   default void loadDevice() {
     BlockEntity be = asBlockEntity();
     getSockets();
-    if (be.getLevel() == null || be.getLevel().isClientSide || getDeviceState().node != null) return;
-    DeviceState state = getDeviceState();
-    state.network = PowerNetworks.get(be.getLevel());
-    state.node = createPowerNode();
-    // Full graph persistence is deferred. A saved ID alone cannot restore a node.
-    state.nodeId = state.network.addNode(state.node);
-    be.setChanged();
-    syncDevice();
+    if (be.isRemoved() || be.getLevel() == null || be.getLevel().isClientSide || getDeviceState().node != null) return;
+    PowerNetworks.getData(be.getLevel()).attach(this);
   }
 
+  /** Permanently delete a device. Call from the block's onRemove when its block type changes. */
   default void removeDevice() {
-    DeviceState state = getDeviceState();
-    for (ISocket socket : getSockets()) {
-      for (ISocket other : List.copyOf(socket.getConnectedSockets())) socket.disconnect(other);
+    var be = asBlockEntity();
+    if (be.getLevel() != null && !be.getLevel().isClientSide) PowerNetworks.getData(be.getLevel()).remove(this);
+  }
+
+  /** Release the BE reference, preserving the node identity, frozen state, and connections. */
+  default void unloadDevice() {
+    var be = asBlockEntity();
+    if (be.getLevel() != null && !be.getLevel().isClientSide && getDeviceState().network != null) {
+      PowerNetworks.getData(be.getLevel()).detach(this);
     }
-    if (state.network != null && state.node != null) state.network.removeNode(state.nodeId);
-    state.node = null;
-    state.network = null;
   }
 
   default void syncDevice() {

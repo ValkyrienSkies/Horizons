@@ -40,6 +40,14 @@ class ResistorBlockEntity(pos: BlockPos, state: BlockState) : ElectricalBlockEnt
 }
 class SwitchBlockEntity(pos: BlockPos, state: BlockState) : ElectricalBlockEntity(HorizonsBlockEntities.SWITCH.get(), pos, state) {
     override fun createPowerNode() = SwitchNode(blockState.getValue(BlockStateProperties.POWERED))
+    override fun onLoad() {
+        super.onLoad()
+        val node = powerNode as? SwitchNode ?: return
+        val level = level ?: return
+        if (!level.isClientSide && blockState.getValue(BlockStateProperties.POWERED) != node.isClosed) {
+            level.setBlock(worldPosition, blockState.setValue(BlockStateProperties.POWERED, node.isClosed), 3)
+        }
+    }
     fun setClosed(closed: Boolean) {
         val node = powerNode as? SwitchNode ?: return
         powerNetwork?.updateTopology { node.setClosed(closed) }

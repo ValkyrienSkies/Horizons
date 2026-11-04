@@ -4,6 +4,7 @@ import net.minecraft.world.level.Level
 import net.minecraftforge.event.level.LevelEvent
 import net.minecraftforge.event.server.ServerStartingEvent
 import net.minecraftforge.event.server.ServerStoppingEvent
+import net.minecraftforge.event.server.ServerStoppedEvent
 import net.minecraftforge.fml.ModList
 import net.minecraftforge.fml.common.Mod
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent
@@ -33,6 +34,8 @@ object Horizons {
         FORGE_BUS.addListener(::serverInit)
         FORGE_BUS.addListener(::levelLoaded)
         FORGE_BUS.addListener(::serverStop)
+        FORGE_BUS.addListener { _: ServerStoppedEvent -> PowerNetworks.clear() }
+        PowerNetworks.registerEvents(FORGE_BUS)
         HorizonsBlocks.register()
         HorizonsItems.register()
         HorizonsBlockEntities.register()
@@ -73,6 +76,5 @@ object Horizons {
     fun serverStop (event: ServerStoppingEvent) {
         engine?.close()
         engine = null
-        PowerNetworks.clear()
     }
 }

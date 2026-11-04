@@ -15,6 +15,7 @@ public interface IPowerNetwork<T extends Level> {
 
   IPBSolver getSolver();
   Collection<IPowerNode> getNodes();
+  default boolean hasNodes() { return !getNodes().isEmpty(); }
   double getTimeStepSeconds();
 
   /** Allocates a network-local ID immediately; registration happens on the simulation thread. */

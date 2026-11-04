@@ -25,18 +25,23 @@ public abstract class DeviceBlockEntity extends BlockEntity implements IDevice {
   public static Set<DeviceBlockEntity> getClientDevices() { return Set.copyOf(CLIENT_DEVICES); }
 
   @Override public void onLoad() {
+    if (isRemoved()) return;
     super.onLoad();
     loadDevice();
     if (level != null && level.isClientSide) CLIENT_DEVICES.add(this);
   }
 
   @Override public void setRemoved() {
-    // Chunk-unload graph handling is deliberately deferred with network persistence.
-    if (level != null && !level.isClientSide && level.getBlockState(worldPosition).getBlock() != getBlockState().getBlock()) {
-      removeDevice();
-    }
+    // Chunk unload and permanent block replacement both call setRemoved. Only onRemove deletes the node.
+    unloadDevice();
     if (level != null && level.isClientSide) CLIENT_DEVICES.remove(this);
     super.setRemoved();
+  }
+
+  @Override public void onChunkUnloaded() {
+    unloadDevice();
+    if (level != null && level.isClientSide) CLIENT_DEVICES.remove(this);
+    super.onChunkUnloaded();
   }
 
   @Override protected void saveAdditional(CompoundTag tag) {
@@ -67,7 +72,7 @@ public abstract class DeviceBlockEntity extends BlockEntity implements IDevice {
         connections.add(connection);
       }
     }
-    // Connections are sent to tracking clients only; saveAdditional persists only the ID.
+    // BE packets contain only a render view of active connections. The archive owns durable connections.
     tag.put("SocketConnections", connections);
     return tag;
   }

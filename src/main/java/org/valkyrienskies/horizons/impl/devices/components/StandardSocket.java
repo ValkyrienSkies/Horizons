@@ -5,6 +5,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.CompoundTag;
 import org.valkyrienskies.horizons.api.devices.IDevice;
+import org.valkyrienskies.horizons.api.devices.PowerNetworks;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.primitives.AABBdc;
@@ -26,7 +27,6 @@ public class StandardSocket implements ISocket {
   private final Vector3dc normal;
   private final AABBdc bounds;
 
-  private final ArrayList<ISocket> connectedSockets = new ArrayList<>();
   private final ArrayList<ClientConnection> clientConnections = new ArrayList<>();
 
   private double maxDistance = 10.0;
@@ -99,7 +99,19 @@ public class StandardSocket implements ISocket {
       }
       return List.copyOf(result);
     }
-    return List.copyOf(connectedSockets);
+    if (!(blockEntity instanceof IDevice device) || device.getPowerNetwork() == null) return List.of();
+    var data = PowerNetworks.getData(blockEntity.getLevel());
+    ArrayList<ISocket> sockets = new ArrayList<>();
+    for (var cable : data.getArchive().getConnections(device.getNodeId())) {
+      var endpoint = cable.other(device.getNodeId(), port);
+      if (endpoint == null) continue;
+      IDevice other = data.getDevice(endpoint.nodeId());
+      if (other != null) {
+        ISocket socket = other.getSocket(endpoint.port());
+        if (socket != null) sockets.add(socket);
+      }
+    }
+    return List.copyOf(sockets);
   }
 
   @Override
@@ -118,11 +130,15 @@ public class StandardSocket implements ISocket {
   }
 
   @Override public boolean canAcceptConnection(ISocket other) {
-    return connectedSockets.size() < maxConnections;
+    if (blockEntity.getLevel() == null || blockEntity.getLevel().isClientSide
+        || !(blockEntity instanceof IDevice device) || device.getPowerNetwork() == null) return false;
+    return PowerNetworks.getData(blockEntity.getLevel()).getArchive().getConnections(device.getNodeId()).stream()
+        .filter(cable -> cable.other(device.getNodeId(), port) != null).count() < maxConnections;
   }
 
-  @Override public void onConnected(ISocket other) { connectedSockets.add(other); }
-  @Override public void onDisconnected(ISocket other) { connectedSockets.remove(other); }
+  // The network archive is authoritative; these hooks remain available to specialized sockets.
+  @Override public void onConnected(ISocket other) {}
+  @Override public void onDisconnected(ISocket other) {}
 
   public void readClientConnections(ListTag list) {
     clientConnections.clear();
@@ -147,21 +163,17 @@ public class StandardSocket implements ISocket {
     boolean alreadyConnected = isConnectedTo(other);
     boolean maxConnectionsReached = !canAcceptConnection(other) || !other.canAcceptConnection(this);
     if (inRange && !sameSocket && !alreadyConnected && !maxConnectionsReached) {
+      var data = PowerNetworks.getData(blockEntity.getLevel());
+      try {
+        if (!data.getArchive().connect(device.getNodeId(), port, otherDevice.getNodeId(), other.getPort(), 1e-6)) {
+          throw new IllegalArgumentException("Duplicate cable");
+        }
+      } catch (IllegalArgumentException e) {
+        throw new SocketConnectionException(e.getMessage(), true, false, false, false);
+      }
       onConnected(other);
       other.onConnected(this);
-      var node = device.getPowerNode();
-      var otherNode = otherDevice.getPowerNode();
-      if (port < 0 || port >= node.getPorts() || other.getPort() < 0 || other.getPort() >= otherNode.getPorts()) {
-        onDisconnected(other);
-        other.onDisconnected(this);
-        throw new SocketConnectionException("Socket port does not exist on its node", true, false, false, false);
-      }
-      device.getPowerNetwork().updateTopology(() -> {
-        node.addConnection(otherNode, port, other.getPort());
-        otherNode.addConnection(node, other.getPort(), port);
-      });
-      device.syncDevice();
-      otherDevice.syncDevice();
+      data.connectionsChanged(device.getNodeId(), otherDevice.getNodeId());
       return;
     }
     throw new SocketConnectionException("Cannot connect to socket: " + other, inRange, sameSocket, alreadyConnected, maxConnectionsReached);
@@ -169,20 +181,13 @@ public class StandardSocket implements ISocket {
 
   @Override
   public boolean disconnect(ISocket other) {
-    if (!connectedSockets.contains(other)) return false;
+    if (!(blockEntity instanceof IDevice device) || !(other.getBlockEntity() instanceof IDevice otherDevice)
+        || device.getPowerNetwork() == null || device.getPowerNetwork() != otherDevice.getPowerNetwork()) return false;
+    var data = PowerNetworks.getData(blockEntity.getLevel());
+    if (!data.getArchive().disconnect(device.getNodeId(), port, otherDevice.getNodeId(), other.getPort())) return false;
     onDisconnected(other);
     other.onDisconnected(this);
-    if (blockEntity instanceof IDevice device && other.getBlockEntity() instanceof IDevice otherDevice
-        && device.getPowerNetwork() != null && device.getPowerNode() != null && otherDevice.getPowerNode() != null) {
-      var node = device.getPowerNode();
-      var otherNode = otherDevice.getPowerNode();
-      device.getPowerNetwork().updateTopology(() -> {
-        node.removeConnection(otherNode, port, other.getPort());
-        otherNode.removeConnection(node, other.getPort(), port);
-      });
-      device.syncDevice();
-      otherDevice.syncDevice();
-    }
+    data.connectionsChanged(device.getNodeId(), otherDevice.getNodeId());
     return true;
   }
 

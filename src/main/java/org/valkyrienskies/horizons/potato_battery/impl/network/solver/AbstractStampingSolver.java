@@ -29,6 +29,10 @@ abstract class AbstractStampingSolver implements IPBSolver {
   private static final double MAX_RELATIVE_CURRENT_STEP = 1.5;
   private final Map<IPowerNetwork<?>, CachedTopologyEntry> topologyCache = new WeakHashMap<>();
 
+  @Override public void invalidateTopology(IPowerNetwork<?> network) {
+    topologyCache.remove(network);
+  }
+
   @Override
   public void step(IPowerNetwork<?> network, int subSteps) {
     runStep(network, subSteps, null);

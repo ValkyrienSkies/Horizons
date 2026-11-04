@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyCacheableNetwork {
   private static final int MIN_DYNAMIC_NONLINEAR_SUBSTEPS = 4;
@@ -86,6 +87,8 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
     return java.util.List.copyOf(nodes.values());
   }
 
+  @Override public boolean hasNodes() { return !nodes.isEmpty(); }
+
   @Override
   public double getTimeStepSeconds() {
     return timeStepSeconds;
@@ -93,7 +96,7 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
 
   @Override
   public long addNode(IPowerNode node) {
-    long id = nextNodeId.getAndIncrement();
+    long id = allocateNodeId();
     updateTopology(() -> {
       nodes.put(id, node);
       node.onAdded();
@@ -117,20 +120,100 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
 
   @Override
   public void removeNode(long id) {
-    updateTopology(() -> {
-      IPowerNode removed = nodes.remove(id);
-      if (removed == null) return;
-      positionIds.values().removeIf(value -> value == id);
-      for (IPowerNode node : nodes.values()) {
-        for (int port = 0; port < node.getPorts(); port++) {
-          for (var connection : node.getConnections(port)) {
-            if (connection.node() == removed) node.removeConnection(connection, port);
-          }
+    updateTopology(() -> detachNode(id, true));
+  }
+
+  private void detachNode(long id, boolean permanent) {
+    detachNodes(java.util.Set.of(id), permanent);
+  }
+
+  private void detachNodes(java.util.Collection<Long> ids, boolean permanent) {
+    java.util.Set<IPowerNode> removed = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+    for (long id : ids) {
+      IPowerNode node = nodes.remove(id);
+      if (node != null) removed.add(node);
+    }
+    if (removed.isEmpty()) return;
+    positionIds.values().removeIf(ids::contains);
+    for (IPowerNode node : nodes.values()) {
+      for (int port = 0; port < node.getPorts(); port++) {
+        for (var connection : node.getConnections(port)) {
+          if (removed.contains(connection.node())) node.removeConnection(connection, port);
         }
       }
-      removed.removeAllConnections();
-      removed.onRemoved();
+    }
+    for (IPowerNode node : removed) {
+      node.removeAllConnections();
+      if (permanent) node.onRemoved();
+    }
+    HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> remaining = new HashMap<>(publishedNodeEnergyData);
+    removed.forEach(remaining::remove);
+    publishedNodeEnergyData = remaining;
+    stagingNodeEnergyData = new HashMap<>();
+  }
+
+  public long allocateNodeId() {
+    long id = nextNodeId.getAndUpdate(value -> {
+      if (value == Long.MAX_VALUE) throw new IllegalStateException("Power node IDs exhausted");
+      return value + 1;
     });
+    return id;
+  }
+
+  public long getNextNodeId() { return nextNodeId.get(); }
+
+  /** Advance the allocator past restored IDs, including nodes that are not currently active. */
+  public void reserveNodeIdsThrough(long id) {
+    if (id < 0 || id == Long.MAX_VALUE) throw new IllegalArgumentException("Invalid node ID " + id);
+    nextNodeId.accumulateAndGet(id + 1, Math::max);
+  }
+
+  /** Restores an already allocated identity, without waiting for another simulation step. */
+  public synchronized void restoreNode(long id, IPowerNode node) {
+    applyPendingChanges();
+    reserveNodeIdsThrough(id);
+    if (nodes.putIfAbsent(id, node) != null) throw new IllegalStateException("Duplicate active node " + id);
+    node.onAdded();
+    invalidateTopology();
+  }
+
+  /** Removes only the live instance. Persistence owns the frozen state and logical connections. */
+  public synchronized void suspendNode(long id) {
+    suspendNodes(java.util.Set.of(id));
+  }
+
+  public synchronized void suspendNodes(java.util.Collection<Long> ids) {
+    applyPendingChanges();
+    detachNodes(ids, false);
+    invalidateTopology();
+  }
+
+  /** Snapshot/restore barrier. The callback must not access Minecraft worlds or block entities. */
+  public synchronized <T> T withState(Supplier<T> action) {
+    applyPendingChanges();
+    try {
+      return action.get();
+    } finally {
+      applyPendingChanges();
+    }
+  }
+
+  private void invalidateTopology() {
+    solver.invalidateTopology(this);
+    topologyDirty = true;
+    topologyRevision++;
+    sleeping = false;
+    settleConfirmationSolvesRemaining = 1;
+  }
+
+  private void applyPendingChanges() {
+    boolean changed = false;
+    Runnable change;
+    while ((change = updateQueue.poll()) != null) {
+      change.run();
+      changed = true;
+    }
+    if (changed) invalidateTopology();
   }
 
   @Override
@@ -154,25 +237,14 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
   }
 
   @Override
-  public void energyTick(double timeStep) {
+  public synchronized void energyTick(double timeStep) {
       if (!loaded) {
           return;
       }
 
     if (!Double.isFinite(timeStep) || timeStep <= 0) throw new IllegalArgumentException("Invalid time step");
     timeStepSeconds = timeStep;
-    boolean hadQueuedChanges = false;
-    Runnable change;
-    while ((change = updateQueue.poll()) != null) {
-      change.run();
-      hadQueuedChanges = true;
-    }
-    if (hadQueuedChanges) {
-      topologyDirty = true;
-      topologyRevision++;
-      sleeping = false;
-      settleConfirmationSolvesRemaining = 1;
-    }
+    applyPendingChanges();
 
     SimulationPolicy simulationPolicy = classifySimulationPolicy();
     lastRequestedSubsteps = simulationPolicy.subSteps;
