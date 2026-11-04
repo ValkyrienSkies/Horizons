@@ -71,7 +71,8 @@ public final class PowerNetworkVisualizer {
     private Thread simulationThread;
 
     private VisualizerModel(IPBSolver solver) {
-      this.network = new PowerNetworkServer(null, null, solver);
+      this.network = new PowerNetworkServer(solver);
+      network.markLoaded();
       buildNetwork();
       step();
     }
@@ -159,7 +160,7 @@ public final class PowerNetworkVisualizer {
         ticks++;
         batteryVoltage = 7.5 + Math.sin(ticks * 0.05) * 2.5;
         battery.setVoltage(batteryVoltage);
-        network.energyTick();
+        network.energyTick(network.getTimeStepSeconds());
         sourceCurrent = Math.abs(network.getCurrentOver(battery, sourceBus, 0, 0));
         centerVoltage = averageVoltage(grid[GRID_WIDTH / 2][GRID_HEIGHT / 2]);
       }

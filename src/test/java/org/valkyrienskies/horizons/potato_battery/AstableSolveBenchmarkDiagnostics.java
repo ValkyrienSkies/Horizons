@@ -30,7 +30,7 @@ public final class AstableSolveBenchmarkDiagnostics {
     for (SolverSpec solver : selectedSolvers(System.getProperty("power.solver", "all"))) {
       AstableScenario scenario = new AstableScenario(solver.factory().get());
       for (int i = 0; i < 12; i++) {
-        scenario.network.energyTick();
+        scenario.network.energyTick(scenario.network.getTimeStepSeconds());
       }
 
       long wallNanos = 0L;
@@ -41,7 +41,7 @@ public final class AstableSolveBenchmarkDiagnostics {
 
       for (int i = 0; i < iterations; i++) {
         long start = System.nanoTime();
-        scenario.network.energyTick();
+        scenario.network.energyTick(scenario.network.getTimeStepSeconds());
         wallNanos += System.nanoTime() - start;
         nonlinearIterations += scenario.network.getLastNonlinearIterations();
         substeps += scenario.network.getLastRequestedSubsteps();

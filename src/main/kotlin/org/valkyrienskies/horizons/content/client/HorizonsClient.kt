@@ -13,11 +13,11 @@ import net.minecraftforge.event.TickEvent
 import net.minecraftforge.eventbus.api.SubscribeEvent
 import net.minecraftforge.fml.common.Mod
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent
-import org.valkyrienskies.horizons.PotatoBatteryTask
 import org.valkyrienskies.horizons.api.foundation.networking.bi_directional.ObjectGrabPacket
 import org.valkyrienskies.horizons.content.HorizonsNetworking
 import org.valkyrienskies.horizons.content.ship_grabbing.PlayerGrabbingMixinDuck
 import org.valkyrienskies.horizons.impl.render.SocketRenderer
+import org.valkyrienskies.horizons.impl.render.DeviceDebugRenderer
 import org.valkyrienskies.horizons.potato_battery.impl.client.PowerNetworkClient
 import thedarkcolour.kotlinforforge.forge.MOD_BUS
 import thedarkcolour.kotlinforforge.forge.addGenericListener
@@ -38,6 +38,8 @@ object HorizonsClient {
     @JvmStatic
     fun clientInit(event: FMLClientSetupEvent) {
         // Put anything initialized on forge-side client here.
+        // Kotlin for Forge auto-subscribes Kotlin objects, so register this Java listener explicitly.
+        EVENT_BUS.addListener(DeviceDebugRenderer::render)
         EVENT_BUS.register(HorizonsKeybindings)
         EVENT_BUS.register(HorizonsInputHandler)
         EVENT_BUS.addListener(::onClientTick)

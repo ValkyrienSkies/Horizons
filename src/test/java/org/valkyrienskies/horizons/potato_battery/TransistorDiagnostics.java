@@ -59,7 +59,8 @@ public final class TransistorDiagnostics {
       NPNTransistorNode q = new NPNTransistorNode();
       GroundNode ground = new GroundNode();
 
-      PowerNetworkServer network = new PowerNetworkServer(null, null, solver.factory().get());
+      PowerNetworkServer network = new PowerNetworkServer(solver.factory().get());
+      network.markLoaded();
       addNode(network, 0, vcc);
       addNode(network, 1, vb);
       addNode(network, 2, rc);
@@ -105,7 +106,8 @@ public final class TransistorDiagnostics {
       PNPTransistorNode q = new PNPTransistorNode();
       GroundNode ground = new GroundNode();
 
-      PowerNetworkServer network = new PowerNetworkServer(null, null, solver.factory().get());
+      PowerNetworkServer network = new PowerNetworkServer(solver.factory().get());
+      network.markLoaded();
       addNode(network, 0, vcc);
       addNode(network, 1, vb);
       addNode(network, 2, rc);
@@ -150,7 +152,8 @@ public final class TransistorDiagnostics {
       NMOSTransistorNode m = new NMOSTransistorNode();
       GroundNode ground = new GroundNode();
 
-      PowerNetworkServer network = new PowerNetworkServer(null, null, solver.factory().get());
+      PowerNetworkServer network = new PowerNetworkServer(solver.factory().get());
+      network.markLoaded();
       addNode(network, 0, vcc);
       addNode(network, 1, vg);
       addNode(network, 2, rd);
@@ -192,7 +195,8 @@ public final class TransistorDiagnostics {
       PMOSTransistorNode m = new PMOSTransistorNode();
       GroundNode ground = new GroundNode();
 
-      PowerNetworkServer network = new PowerNetworkServer(null, null, solver.factory().get());
+      PowerNetworkServer network = new PowerNetworkServer(solver.factory().get());
+      network.markLoaded();
       addNode(network, 0, vcc);
       addNode(network, 1, vg);
       addNode(network, 2, rd);
@@ -226,7 +230,7 @@ public final class TransistorDiagnostics {
 
   private static void settle(PowerNetworkServer network, int stepsPerPoint) {
     for (int i = 0; i < stepsPerPoint; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
     }
   }
 

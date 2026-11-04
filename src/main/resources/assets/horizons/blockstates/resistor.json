@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "horizons:block/resistor"
+    },
+    "facing=east": {
+      "model": "horizons:block/resistor",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "horizons:block/resistor",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "horizons:block/resistor",
+      "y": 270
+    }
+  }
+}

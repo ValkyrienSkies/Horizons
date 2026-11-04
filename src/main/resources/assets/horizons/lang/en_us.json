@@ -1,0 +1,15 @@
+{
+  "block.horizons.battery": "Battery",
+  "block.horizons.switch": "Switch",
+  "block.horizons.resistor": "Resistor",
+  "block.horizons.lamp": "Lamp",
+  "item.horizons.debug_cable": "Debug Cable",
+  "message.horizons.aim_at_socket": "Aim at a socket.",
+  "message.horizons.socket_selected": "Socket %s selected. Choose a second socket.",
+  "message.horizons.selection_expired": "The selected socket is no longer available.",
+  "message.horizons.selection_cleared": "Cable selection cleared.",
+  "message.horizons.cable_removed": "Cable removed.",
+  "message.horizons.cable_connected": "Cable connected.",
+  "message.horizons.out_of_range": "Sockets must be within 10 blocks when connecting.",
+  "message.horizons.connection_failed": "Unable to connect these sockets."
+}

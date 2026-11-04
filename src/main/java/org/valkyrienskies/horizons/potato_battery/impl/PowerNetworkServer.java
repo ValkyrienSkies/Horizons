@@ -1,10 +1,8 @@
 package org.valkyrienskies.horizons.potato_battery.impl;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraftforge.fml.loading.FMLEnvironment;
 import org.valkyrienskies.core.api.world.PhysLevel;
 import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork;
 import org.valkyrienskies.horizons.potato_battery.api.network.IPBSolver;
@@ -19,6 +17,8 @@ import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyCacheableNetwork {
   private static final int MIN_DYNAMIC_NONLINEAR_SUBSTEPS = 4;
@@ -36,14 +36,17 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
 
   private final IPBSolver solver;
 
-  private final Long2ObjectOpenHashMap<IPowerNode> nodes = new Long2ObjectOpenHashMap<>();
+  private final ConcurrentHashMap<Long, IPowerNode> nodes = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<Long, Long> positionIds = new ConcurrentHashMap<>();
+  private final AtomicLong nextNodeId = new AtomicLong();
+  private double timeStepSeconds = DEFAULT_TIME_STEP;
 
   private volatile HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> publishedNodeEnergyData = new HashMap<>();
   private HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> stagingNodeEnergyData = new HashMap<>();
   private @Nullable Thread solveThread;
   private boolean solveInProgress;
 
-  private final ConcurrentLinkedQueue<QueuedChange> updateQueue = new ConcurrentLinkedQueue<>();
+  private final ConcurrentLinkedQueue<Runnable> updateQueue = new ConcurrentLinkedQueue<>();
   private boolean topologyDirty = true;
   private long topologyRevision;
   private boolean sleeping;
@@ -80,22 +83,64 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
 
   @Override
   public Collection<IPowerNode> getNodes() {
-    return nodes.values();
+    return java.util.List.copyOf(nodes.values());
   }
 
   @Override
   public double getTimeStepSeconds() {
-    return DEFAULT_TIME_STEP;
+    return timeStepSeconds;
   }
 
   @Override
-  public void addNode(BlockPos pos, IPowerNode node) {
-    updateQueue.add(new QueuedChange(pos, node));
+  public long addNode(IPowerNode node) {
+    long id = nextNodeId.getAndIncrement();
+    updateTopology(() -> {
+      nodes.put(id, node);
+      node.onAdded();
+    });
+    return id;
+  }
+
+  @Override
+  public long addNode(BlockPos pos, IPowerNode node) {
+    long id = addNode(node);
+    Long previous = positionIds.put(pos.asLong(), id);
+    if (previous != null) removeNode(previous);
+    return id;
   }
 
   @Override
   public void removeNode(BlockPos pos) {
-    updateQueue.add(new QueuedChange(pos, null));
+    Long id = positionIds.remove(pos.asLong());
+    if (id != null) removeNode(id);
+  }
+
+  @Override
+  public void removeNode(long id) {
+    updateTopology(() -> {
+      IPowerNode removed = nodes.remove(id);
+      if (removed == null) return;
+      positionIds.values().removeIf(value -> value == id);
+      for (IPowerNode node : nodes.values()) {
+        for (int port = 0; port < node.getPorts(); port++) {
+          for (var connection : node.getConnections(port)) {
+            if (connection.node() == removed) node.removeConnection(connection, port);
+          }
+        }
+      }
+      removed.removeAllConnections();
+      removed.onRemoved();
+    });
+  }
+
+  @Override
+  public @Nullable IPowerNode getNode(long id) {
+    return nodes.get(id);
+  }
+
+  @Override
+  public void updateTopology(Runnable change) {
+    updateQueue.add(change);
   }
 
   @Override
@@ -114,23 +159,14 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
           return;
       }
 
-    boolean hadQueuedChanges = !updateQueue.isEmpty();
-    updateQueue.forEach(change -> {
-      if (change.node == null) {
-        IPowerNode removed = nodes.remove(change.pos.asLong());
-        if (removed != null) {
-          publishedNodeEnergyData.remove(removed);
-          stagingNodeEnergyData.remove(removed);
-          removed.onRemoved();
-        }
-      } else {
-        nodes.put(change.pos.asLong(), change.node);
-        publishedNodeEnergyData.putIfAbsent(change.node, new Long2ObjectOpenHashMap<>(change.node.getPorts()));
-        change.node.onAdded();
-      }
-    });
-
-    updateQueue.clear();
+    if (!Double.isFinite(timeStep) || timeStep <= 0) throw new IllegalArgumentException("Invalid time step");
+    timeStepSeconds = timeStep;
+    boolean hadQueuedChanges = false;
+    Runnable change;
+    while ((change = updateQueue.poll()) != null) {
+      change.run();
+      hadQueuedChanges = true;
+    }
     if (hadQueuedChanges) {
       topologyDirty = true;
       topologyRevision++;
@@ -358,20 +394,18 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
     return fingerprint;
   }
 
-  private record QueuedChange(BlockPos pos, @Nullable IPowerNode node) {}
   private record ConnectionLookup(org.valkyrienskies.horizons.potato_battery.api.network.Connection connection) {}
   private record SimulationPolicy(PowerNodeSimulationMode mode, int subSteps, int requestedSubSteps) {}
 
   private void beginSolveSnapshot() {
-    stagingNodeEnergyData.clear();
+    // Published maps remain immutable so game-thread readers can safely retain a snapshot.
+    stagingNodeEnergyData = new HashMap<>();
     solveThread = Thread.currentThread();
     solveInProgress = true;
   }
 
   private void publishSolveSnapshot() {
-    HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> oldPublished = publishedNodeEnergyData;
     publishedNodeEnergyData = stagingNodeEnergyData;
-    stagingNodeEnergyData = oldPublished;
     solveInProgress = false;
     solveThread = null;
   }

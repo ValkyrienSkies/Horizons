@@ -32,7 +32,7 @@ public final class AstablePhaseBenchmarkDiagnostics {
       IPBSolver solver = solverSpec.factory().get();
       AstableScenario scenario = new AstableScenario(solver);
       for (int i = 0; i < 12; i++) {
-        scenario.network.energyTick();
+        scenario.network.energyTick(scenario.network.getTimeStepSeconds());
       }
 
       int substeps = scenario.network.getLastRequestedSubsteps();
