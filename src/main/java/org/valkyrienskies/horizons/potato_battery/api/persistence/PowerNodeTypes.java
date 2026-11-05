@@ -9,6 +9,7 @@ import org.valkyrienskies.horizons.potato_battery.impl.nodes.VoltageSourceNode;
 import org.valkyrienskies.horizons.potato_battery.impl.nodes.AmmeterNode;
 import org.valkyrienskies.horizons.potato_battery.impl.nodes.FiniteBatteryNode;
 import org.valkyrienskies.horizons.potato_battery.impl.nodes.ACVoltageSourceNode;
+import org.valkyrienskies.horizons.potato_battery.impl.nodes.BatterySocketNode;
 import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Map;
@@ -20,6 +21,20 @@ public final class PowerNodeTypes {
   private static final Map<ResourceLocation, PowerNodeType<?>> BY_ID = new HashMap<>();
   private static final Map<Class<?>, PowerNodeType<?>> BY_CLASS = new HashMap<>();
   static {
+    builtin("battery_socket", BatterySocketNode.class, tag -> {
+      BatterySocketNode node = new BatterySocketNode();
+      if (tag.contains("Cell")) {
+        IPowerNode cell = decode(tag.getCompound("Cell"));
+        if (!(cell instanceof FiniteBatteryNode battery)) throw new IllegalArgumentException("Invalid socket cell");
+        node.retain(tag.getString("CellId"), battery);
+      }
+      return node;
+    }, (node, tag) -> {
+      if (node.getBattery() != null) {
+        tag.put("Cell", encode(node.getBattery()));
+        tag.putString("CellId", node.getBatteryId());
+      }
+    });
     builtin("ac_voltage_source", ACVoltageSourceNode.class,
         tag -> new ACVoltageSourceNode(tag.getDouble("PeakVoltage"), tag.getDouble("FrequencyHz"), tag.getDouble("PhaseCycles")),
         (node, tag) -> {

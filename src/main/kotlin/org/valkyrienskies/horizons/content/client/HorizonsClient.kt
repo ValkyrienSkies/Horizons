@@ -41,6 +41,7 @@ object HorizonsClient {
         // Kotlin for Forge auto-subscribes Kotlin objects, so register this Java listener explicitly.
         EVENT_BUS.addListener(DeviceDebugRenderer::render)
         EVENT_BUS.addListener(PDADebugWires::render)
+        EVENT_BUS.addListener(RigBodyRenderer::render)
         EVENT_BUS.addListener(MeasurementOverlay::render)
         EVENT_BUS.addListener(MeasurementOverlay::receiveMessage)
         EVENT_BUS.register(HorizonsKeybindings)

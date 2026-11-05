@@ -124,6 +124,10 @@ class FiniteBatteryTest {
   }
 
   @Test void rejectsInvalidParameters() {
+    FiniteBatteryNode cell = new FiniteBatteryNode(12, 10, 360000, 0.5);
+    assertThrows(IllegalArgumentException.class, () -> cell.discharge(1, -1));
+    assertThrows(IllegalArgumentException.class, () -> cell.discharge(1, Double.NaN));
+    assertEquals(0.5, cell.getStateOfCharge(), "Invalid integration must not restore or destroy charge");
     assertThrows(IllegalArgumentException.class, () -> new FiniteBatteryNode(0, 0.5, 3600));
     assertThrows(IllegalArgumentException.class, () -> new FiniteBatteryNode(12, -1, 3600));
     assertThrows(IllegalArgumentException.class, () -> new FiniteBatteryNode(12, 0.5, Double.NaN));

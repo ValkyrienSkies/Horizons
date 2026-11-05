@@ -7,6 +7,7 @@ import thedarkcolour.kotlinforforge.forge.MOD_BUS
 
 object HorizonsBlocks {
     private val blocks = DeferredRegister.create(ForgeRegistries.BLOCKS, Horizons.MOD_ID)
+    val ACCUMULATOR_SOCKET = blocks.register("accumulator_socket", ::AccumulatorSocketBlock)
     val BATTERY = blocks.register("battery", ::BatteryBlock)
     val DEBUG_AC_SOURCE = blocks.register("debug_ac_source", ::ACSourceBlock)
     val SWITCH = blocks.register("switch", ::SwitchBlock)

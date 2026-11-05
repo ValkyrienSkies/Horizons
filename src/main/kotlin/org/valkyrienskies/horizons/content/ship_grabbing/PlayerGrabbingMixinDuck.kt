@@ -11,6 +11,9 @@ import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.horizons.api.foundation.mixin.GrabbedObjectTarget
 import org.valkyrienskies.horizons.api.foundation.networking.server_to_client.ClientboundObjectGrabPacket
 import org.valkyrienskies.horizons.content.HorizonsNetworking
+import org.valkyrienskies.horizons.api.rigging.RigBodies
+import org.valkyrienskies.horizons.impl.rigging.RigBodyManager
+import org.valkyrienskies.horizons.impl.rigging.RigBodyForces
 import org.valkyrienskies.mod.api.shipWorld
 import org.valkyrienskies.mod.common.ValkyrienSkiesMod
 import org.valkyrienskies.mod.common.dimensionId
@@ -45,9 +48,9 @@ interface PlayerGrabbingMixinDuck {
 
     fun setGrabbedObjectTarget(distance: Double, position: Vector3dc?, rotation: Quaterniondc?) {
         val t = horizonsGrabbingState.grabbedObjectTarget
-        if (distance >= 0.0) t.distance = distance
-        if (position != null) t.position = position
-        if (rotation != null) t.rotation = rotation
+        if (distance.isFinite() && distance >= 0.0) t.distance = distance.coerceIn(2.0, 40.0)
+        if (position != null && position.isFinite && position.lengthSquared() <= 16.0) t.position = Vector3d(position)
+        if (rotation != null && rotation.isFinite && rotation.lengthSquared() > 1e-9) t.rotation = Quaterniond(rotation).normalize()
     }
 
     fun inGrabMode(): Boolean = horizonsGrabbingState.grabMode
@@ -59,21 +62,27 @@ interface PlayerGrabbingMixinDuck {
     fun tryGrab(id: Long): Boolean {
         val player = this as Player
         val level = player.level()
-        if (id == -1L) {
-            horizonsGrabbingState.grabbedObjectId = -1L
-            horizonsGrabbingState.grabbedObjectTarget = GrabbedObjectTarget()
+        val oldId = getGrabbedObjectId()
+        if (id == -1L || oldId > -1L) {
             if (!level.isClientSide) {
-                HorizonsNetworking.sendToClient(ClientboundObjectGrabPacket(-1L), player as ServerPlayer)
+                RigBodyForces.release(level.dimensionId, oldId)
+                RigBodies.get(level, oldId)?.onRelease(player as ServerPlayer)
             }
-        }
-        return if (horizonsGrabbingState.grabbedObjectId > -1L) {
             horizonsGrabbingState.grabbedObjectId = -1L
             horizonsGrabbingState.grabbedObjectTarget = GrabbedObjectTarget()
-            true
-        } else {
-            horizonsGrabbingState.grabbedObjectId = id
-            true
+            if (!level.isClientSide) HorizonsNetworking.sendToClient(ClientboundObjectGrabPacket(-1L), player as ServerPlayer)
+            return true
         }
+        val rig = RigBodies.get(level, id)
+        if (rig != null) {
+            val body = rig.body ?: return false
+            if (!level.isClientSide && (RigBodies.isGrabbed(level, id) || RigBodyManager.raycast(player)?.bodyId != id || !rig.onGrab(player as ServerPlayer))) return false
+            horizonsGrabbingState.grabbedObjectTarget = GrabbedObjectTarget()
+            val p = body.kinematics.position
+            setGrabbedObjectTarget(player.eyePosition.distanceTo(net.minecraft.world.phys.Vec3(p.x(), p.y(), p.z())).coerceIn(2.0, 10.0), null, body.kinematics.rotation)
+        }
+        horizonsGrabbingState.grabbedObjectId = id
+        return true
     }
 
     fun tryThrow(id: Long): Boolean {
@@ -81,6 +90,12 @@ interface PlayerGrabbingMixinDuck {
         val player = this as Player
         if (player.level().isClientSide) return false
         val level = player.level() as ServerLevel
+        val rig = RigBodies.get(level, id)
+        if (rig != null) {
+            tryGrab(-1L)
+            RigBodyForces.throwBody(level.dimensionId, id, player.lookAngle.toJOML())
+            return true
+        }
         val ship: LoadedServerShip? = level.server.shipWorld!!.loadedShips.getById(horizonsGrabbingState.grabbedObjectId)
         horizonsGrabbingState.grabbedObjectId = -1L
         horizonsGrabbingState.grabbedObjectTarget = GrabbedObjectTarget()
@@ -97,6 +112,16 @@ interface PlayerGrabbingMixinDuck {
         val player = this as Player
         if (player.level().isClientSide) return
         val level = player.level() as ServerLevel
+        val rig = RigBodies.get(level, getGrabbedObjectId())
+        if (rig != null) {
+            val body = rig.body
+            if (body == null || !player.isAlive) { tryGrab(-1L); return }
+            val target = getGrabbedObjectTarget()
+            val position = player.eyePosition.add(player.lookAngle.scale(target.distance)).toJOML()
+            target.position?.let { position.add(it) }
+            RigBodyForces.hold(level.dimensionId, rig.bodyId, position, target.rotation ?: body.kinematics.rotation)
+            return
+        }
         val ship: LoadedServerShip? = level.server.shipWorld!!.loadedShips.getById(horizonsGrabbingState.grabbedObjectId)
         if (ship == null) {
             tryGrab(-1L)
@@ -109,11 +134,11 @@ interface PlayerGrabbingMixinDuck {
 
         val gtpa = ValkyrienSkiesMod.getOrCreateGTPA(level.dimensionId)
         val force = computeGrabForce(ship, targetPos)
-        if (force.lengthSquared() > 1.0e-6) {
+        if (force.isFinite && force.lengthSquared() > 1.0e-6) {
             gtpa.applyWorldForce(ship.id, force, null)
         }
         val torque = computeGrabTorque(ship, targetRot)
-        if (torque.lengthSquared() > 1.0e-6) {
+        if (torque.isFinite && torque.lengthSquared() > 1.0e-6) {
             gtpa.applyWorldTorque(ship.id, torque)
         }
     }
@@ -128,10 +153,7 @@ interface PlayerGrabbingMixinDuck {
     }
 
     private fun computeGrabTorque(ship: LoadedServerShip, targetRot: Quaterniondc): Vector3dc {
-        val rotationError = targetRot.mul(
-            ship.transform.shipToWorldRotation.conjugate(Quaterniond()), Quaterniond()
-        ).normalize()
-        if (rotationError.w < 0.0) rotationError.scale(-1.0)
+        val rotationError = GrabRotation.error(targetRot, ship.transform.shipToWorldRotation) ?: return Vector3d()
 
         val sinHalfAngle = sqrt(
             rotationError.x * rotationError.x +

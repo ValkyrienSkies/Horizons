@@ -9,6 +9,7 @@ import thedarkcolour.kotlinforforge.forge.MOD_BUS
 
 object HorizonsBlockEntities {
     private val types = DeferredRegister.create(ForgeRegistries.BLOCK_ENTITY_TYPES, Horizons.MOD_ID)
+    val ACCUMULATOR_SOCKET = types.register("accumulator_socket") { BlockEntityType.Builder.of(::AccumulatorSocketBlockEntity, HorizonsBlocks.ACCUMULATOR_SOCKET.get()).build(null) }
     val BATTERY = types.register("battery") { BlockEntityType.Builder.of(::BatteryBlockEntity, HorizonsBlocks.BATTERY.get()).build(null) }
     val DEBUG_AC_SOURCE = types.register("debug_ac_source") { BlockEntityType.Builder.of(::ACSourceBlockEntity, HorizonsBlocks.DEBUG_AC_SOURCE.get()).build(null) }
     val SWITCH = types.register("switch") { BlockEntityType.Builder.of(::SwitchBlockEntity, HorizonsBlocks.SWITCH.get()).build(null) }

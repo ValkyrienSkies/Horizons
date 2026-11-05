@@ -18,7 +18,7 @@ public class FiniteBatteryNode extends PowerNode {
   private final double internalResistance;
   private final double chargeCapacityCoulombs;
   private final double capacitance;
-  private double stateOfCharge;
+  private volatile double stateOfCharge;
 
   public FiniteBatteryNode(double maxVoltage, double maxCurrent, double maxEnergyJoules) {
     this(maxVoltage, maxCurrent, maxEnergyJoules, 1.0);
@@ -68,7 +68,13 @@ public class FiniteBatteryNode extends PowerNode {
   }
 
   @Override public void onSubstepComplete(IPowerNetwork<?> network, double timeStepSeconds) {
-    double current = network.getNodeEnergyData(this, 0).getCurrent();
+    discharge(network.getNodeEnergyData(this, 0).getCurrent(), timeStepSeconds);
+  }
+
+  /** Integrate the current when this cell is installed in another electrical node. Solver thread only. */
+  public void discharge(double current, double timeStepSeconds) {
+    if (!Double.isFinite(timeStepSeconds) || timeStepSeconds < 0)
+      throw new IllegalArgumentException("Invalid battery integration step");
     // External power is absorbed without restoring the reactants of this primary cell.
     if (Double.isFinite(current) && current > 0) {
       stateOfCharge = Math.max(0, stateOfCharge - current * timeStepSeconds / chargeCapacityCoulombs);

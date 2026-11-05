@@ -13,6 +13,8 @@ import thedarkcolour.kotlinforforge.forge.MOD_BUS
 
 object HorizonsItems {
     private val items = DeferredRegister.create(ForgeRegistries.ITEMS, Horizons.MOD_ID)
+    val ACCUMULATOR_SOCKET = items.register("accumulator_socket") { BlockItem(HorizonsBlocks.ACCUMULATOR_SOCKET.get(), Item.Properties()) }
+    val DEBUG_ACCUMULATOR = items.register("debug_accumulator", ::DebugAccumulatorItem)
     val BATTERY = items.register("battery") { BlockItem(HorizonsBlocks.BATTERY.get(), Item.Properties()) }
     val DEBUG_AC_SOURCE = items.register("debug_ac_source") { BlockItem(HorizonsBlocks.DEBUG_AC_SOURCE.get(), Item.Properties()) }
     val SWITCH = items.register("switch") { BlockItem(HorizonsBlocks.SWITCH.get(), Item.Properties()) }
@@ -26,7 +28,7 @@ object HorizonsItems {
         items.register(MOD_BUS)
         MOD_BUS.addListener { event: BuildCreativeModeTabContentsEvent ->
             if (event.tabKey == CreativeModeTabs.REDSTONE_BLOCKS) {
-                listOf(VOLTAIC_PILE, BATTERY, DEBUG_AC_SOURCE, SWITCH, RESISTOR, LAMP, AMMETER, DEBUG_CABLE, DEBUG_PDA).forEach { event.accept(it.get()) }
+                listOf(VOLTAIC_PILE, ACCUMULATOR_SOCKET, DEBUG_ACCUMULATOR, BATTERY, DEBUG_AC_SOURCE, SWITCH, RESISTOR, LAMP, AMMETER, DEBUG_CABLE, DEBUG_PDA).forEach { event.accept(it.get()) }
             }
         }
     }

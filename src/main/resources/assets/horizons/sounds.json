@@ -1,4 +1,12 @@
 {
+  "battery_connected": {
+    "subtitle": "sounds.horizons.battery_connected",
+    "sounds": ["horizons:battery_connected"]
+  },
+  "battery_disconnected": {
+    "subtitle": "sounds.horizons.battery_disconnected",
+    "sounds": ["horizons:battery_disconnected"]
+  },
   "plug": {
     "subtitle": "sounds.horizons.plug",
     "sounds": [

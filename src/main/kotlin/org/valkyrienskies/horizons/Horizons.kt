@@ -36,6 +36,7 @@ object Horizons {
         FORGE_BUS.addListener(::serverStop)
         FORGE_BUS.addListener { _: ServerStoppedEvent -> PowerNetworks.clear() }
         PowerNetworks.registerEvents(FORGE_BUS)
+        org.valkyrienskies.horizons.impl.rigging.RigBodyManager.register(FORGE_BUS)
         HorizonsBlocks.register()
         HorizonsItems.register()
         HorizonsBlockEntities.register()
@@ -44,6 +45,7 @@ object Horizons {
         MOD_BUS.addListener(::commonInit)
         if (FMLEnvironment.dist.isClient) {
             MOD_BUS.addListener(HorizonsClient::clientInit)
+            MOD_BUS.addListener(org.valkyrienskies.horizons.content.client.RigBodyRenderer::models)
         }
     }
 

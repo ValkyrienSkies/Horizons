@@ -1,4 +1,4 @@
 {
   "replace": false,
-  "values": ["horizons:voltaic_pile"]
+  "values": ["horizons:voltaic_pile", "horizons:accumulator_socket"]
 }

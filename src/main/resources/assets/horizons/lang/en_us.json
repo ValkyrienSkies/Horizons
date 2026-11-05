@@ -1,4 +1,6 @@
 {
+  "sounds.horizons.battery_connected": "Accumulator connected",
+  "sounds.horizons.battery_disconnected": "Accumulator disconnected",
   "block.horizons.battery": "Battery",
   "block.horizons.debug_ac_source": "Debug AC Power Source",
   "tooltip.horizons.debug_ac_source": "%s V peak, %s Hz sine wave.",
@@ -23,5 +25,9 @@
   "message.horizons.pda_cleared": "PDA probes cleared.",
   "tooltip.horizons.debug_pda": "Right-click two sockets to measure voltage (red − blue).",
   "tooltip.horizons.debug_pda_clear": "Sneak-right-click to clear probes. Click again to start a new measurement.",
-  "hud.horizons.ammeter_current": "Current (0 → 1): %s"
+  "hud.horizons.ammeter_current": "Current (0 → 1): %s",
+  "block.horizons.accumulator_socket": "Accumulator Socket",
+  "item.horizons.debug_accumulator": "Debug Accumulator Spawner",
+  "item.horizons.debug_accumulator.tooltip": "Spawns a charged 500 kg accumulator: 12 V, 10 A short circuit, 100 Wh. Insert terminals downward.",
+  "item.horizons.debug_accumulator.controls": "Grab mode: sneak + scroll to tilt; sneak + sprint + scroll to turn; sprint + scroll to change distance."
 }
