@@ -18,7 +18,7 @@ class AccumulatorContactsTest {
         assertFalse(Contacts.touching(Contacts.points(reversed), null))
         assertFalse(Contacts.touching(Contacts.points(pose().translate(0.2, 0.0, 0.0)), null))
         assertFalse(Contacts.touching(Contacts.points(pose(1.0)), null))
-        assertFalse(Contacts.facing(pose().rotateZ(0.3)))
+        assertFalse(Contacts.facing(pose().rotateZ(Math.toRadians(30.0))))
     }
     @Test fun detectsFallingContactBetweenTicksWithoutCapturingTeleportsOrOneTerminal() {
         val previous = Contacts.points(pose(0.8))
@@ -39,5 +39,23 @@ class AccumulatorContactsTest {
     @Test fun releaseRequiresContactsToLeaveTray() {
         assertFalse(Contacts.clear(Contacts.points(pose())))
         assertTrue(Contacts.clear(Contacts.points(pose(1.5))))
+    }
+    @Test fun acceptsOffCenterTiltedAndLowRestingBatteries() {
+        val offset = Matrix4d().translation(0.6,0.75,0.6).rotateX(Math.PI)
+        assertTrue(Contacts.touching(Contacts.points(offset),null))
+        val tilted = pose().rotateZ(Math.toRadians(12.0))
+        assertTrue(Contacts.facing(tilted))
+        assertTrue(Contacts.touching(Contacts.points(tilted),null))
+        // The collision cube can rest on the tray floor with its decorative terminals below it.
+        assertTrue(Contacts.touching(Contacts.points(pose(0.484375)),null))
+        assertFalse(Contacts.touching(Contacts.points(pose(1.0)),null))
+    }
+    @Test fun capturedBatteryStaysWithinTheLargerReleaseRegion() {
+        val captured = Matrix4d().translation(0.62,0.92,0.62).rotateX(Math.PI)
+        assertTrue(Contacts.touching(Contacts.points(captured),null))
+        assertTrue(Contacts.retained(captured))
+        assertTrue(Contacts.retained(pose().translate(0.14,0.0,0.0)))
+        assertFalse(Contacts.retained(pose().translate(0.2,0.0,0.0)))
+        assertFalse(Contacts.retained(pose().rotateY(Math.PI)))
     }
 }

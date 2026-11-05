@@ -62,11 +62,8 @@ class AccumulatorSocketBlockEntity(pos: BlockPos, state: BlockState) : DeviceBlo
             val body = accumulator?.body
             if (body != null) {
                 val relative = trayToWorld().invert().mul(body.kinematics.transform.toWorld)
-                val contacts = AccumulatorContacts.points(relative)
                 // Also reject stale constraints and externally moved bodies that no longer touch the tray.
-                if (!AccumulatorContacts.facing(relative) || contacts.withIndex().any { (i, p) ->
-                    p.distanceSquared(Vector3d(if (i == 0) 0.3125 else 0.6875, 0.125, 0.5)) > 0.125 * 0.125
-                }) { disconnect(); return }
+                if (!AccumulatorContacts.retained(relative)) { disconnect(); return }
             }
         }
         if (pending || jointId != null) return
