@@ -249,6 +249,56 @@ class PowerNetworkArchiveTest {
     network.markLoaded();
     return new PowerNetworkArchive(network, () -> {});
   }
+
+  @ParameterizedTest @MethodSource("solvers")
+  void acSourceSettingsAndPhaseFreezeAcrossUnloadAndRestart(Supplier<IPBSolver> solver) throws Exception {
+    PowerNetworkArchive original = archive(solver.get());
+    var source = original.attach(BATTERY, "test:ac_source", -1, () -> new ACVoltageSourceNode(17, 2.5));
+    for (int i = 0; i < 37; i++) original.getNetwork().energyTick(1.0 / 120);
+    double phase = ((ACVoltageSourceNode) source.node()).getPhaseCycles();
+    original.suspendChunk(PowerNetworkArchive.chunkOf(BATTERY));
+    for (int i = 0; i < 100; i++) original.getNetwork().energyTick(0.05);
+    PowerNetworkArchive restored = archive(solver.get());
+    restored.read(diskRoundtrip(original));
+    var attached = restored.attach(BATTERY, "test:ac_source", source.id(), () -> { throw new AssertionError("Must reuse phase"); });
+    ACVoltageSourceNode node = (ACVoltageSourceNode) attached.node();
+    assertEquals(source.id(), attached.id());
+    assertEquals(phase, node.getPhaseCycles());
+    assertEquals(17, node.getPeakVoltage());
+    assertEquals(2.5, node.getFrequencyHz());
+    restored.getNetwork().energyTick(0.01);
+    assertEquals(17 * Math.sin(2 * Math.PI * (phase + 0.025)), restored.getNetwork().getVoltageBetween(node, 0, node, 1), 1e-6);
+  }
+
+  @ParameterizedTest @MethodSource("solvers")
+  void finiteBatteryChargeFreezesWhenUnloadedAndSurvivesRestart(Supplier<IPBSolver> solver) throws Exception {
+    PowerNetworkArchive original = archive(solver.get());
+    var pile = original.attach(BATTERY, "test:voltaic_pile", -1, () -> new FiniteBatteryNode(12, 0.5, 3.6));
+    var load = original.attach(LAMP, "test:load", -1, () -> new ResistorNode(24));
+    original.connect(pile.id(), 0, load.id(), 0, 1e-6);
+    original.connect(pile.id(), 1, load.id(), 1, 1e-6);
+    for (int i = 0; i < 100; i++) original.getNetwork().energyTick(0.05);
+    double charge = ((FiniteBatteryNode) pile.node()).getStateOfCharge();
+    assertTrue(charge > 0 && charge < 0.5);
+    original.suspendChunk(PowerNetworkArchive.chunkOf(BATTERY));
+    for (int i = 0; i < 100; i++) original.getNetwork().energyTick(0.05);
+
+    PowerNetworkArchive restored = archive(solver.get());
+    restored.read(diskRoundtrip(original));
+    restored.activateChunk(PowerNetworkArchive.chunkOf(LAMP));
+    settle(restored);
+    assertEquals(0, ((ResistorNode) restored.getNetwork().getNode(load.id())).getDissipatedPower(restored.getNetwork()), 1e-8);
+    var attached = restored.attach(BATTERY, "test:voltaic_pile", pile.id(), () -> { throw new AssertionError("Must reuse saved charge"); });
+    FiniteBatteryNode battery = (FiniteBatteryNode) attached.node();
+    assertEquals(pile.id(), attached.id());
+    assertEquals(charge, battery.getStateOfCharge());
+    assertEquals(12, battery.getMaxVoltage());
+    assertEquals(0.5, battery.getMaxCurrent());
+    assertEquals(3.6, battery.getMaxEnergyJoules());
+    settle(restored);
+    assertTrue(battery.getStateOfCharge() < charge);
+    assertTrue(((ResistorNode) restored.getNetwork().getNode(load.id())).getDissipatedPower(restored.getNetwork()) > 0);
+  }
   private static CompoundTag diskRoundtrip(PowerNetworkArchive archive) throws IOException {
     ByteArrayOutputStream buffer = new ByteArrayOutputStream();
     NbtIo.writeCompressed(archive.write(new CompoundTag()), buffer);

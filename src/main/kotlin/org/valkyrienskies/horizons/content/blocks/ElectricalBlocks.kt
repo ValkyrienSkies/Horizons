@@ -29,7 +29,7 @@ import org.valkyrienskies.horizons.content.blockentities.*
 import org.valkyrienskies.horizons.content.items.DebugCableItem
 import org.valkyrienskies.horizons.content.items.pda.PDAItem
 
-/* Debug classes. Remove later */
+/** Shared block lifecycle, facing, and shape rotation for electrical devices. */
 abstract class ElectricalBlock(properties: BlockBehaviour.Properties = BlockBehaviour.Properties.of().strength(2f).noOcclusion()) : BaseEntityBlock(properties) {
     init { registerDefaultState(stateDefinition.any().setValue(BlockStateProperties.HORIZONTAL_FACING, net.minecraft.core.Direction.NORTH)) }
     override fun createBlockStateDefinition(builder: StateDefinition.Builder<Block, BlockState>) { builder.add(BlockStateProperties.HORIZONTAL_FACING) }
@@ -57,6 +57,7 @@ abstract class ElectricalBlock(properties: BlockBehaviour.Properties = BlockBeha
     }
 }
 
+/* Debug blocks. Remove later. */
 class BatteryBlock : ElectricalBlock() {
     override fun newBlockEntity(pos: BlockPos, state: BlockState) = BatteryBlockEntity(pos, state)
     override fun getShape(state: BlockState, level: BlockGetter, pos: BlockPos, context: CollisionContext): VoxelShape = rotate(SHAPE, state)

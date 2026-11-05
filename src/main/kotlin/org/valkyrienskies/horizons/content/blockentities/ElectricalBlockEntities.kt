@@ -17,7 +17,7 @@ import org.valkyrienskies.horizons.potato_battery.impl.nodes.SwitchNode
 import org.valkyrienskies.horizons.potato_battery.impl.nodes.VoltageSourceNode
 import kotlin.math.roundToInt
 
-/* Debug classes. Remove later */
+/** Shared pair of top contacts (or side contacts for the debug switch). */
 abstract class ElectricalBlockEntity(type: BlockEntityType<*>, pos: BlockPos, state: BlockState) : DeviceBlockEntity(type, pos, state) {
     override fun createSockets(): List<ISocket> {
         val bounds = if (this is SwitchBlockEntity) listOf(AABBd(3.0/16, 0.5/16, 7.0/16, 4.0/16, 2.5/16, 9.0/16), AABBd(12.0/16, 0.5/16, 7.0/16, 13.0/16, 2.5/16, 9.0/16))
@@ -32,6 +32,7 @@ abstract class ElectricalBlockEntity(type: BlockEntityType<*>, pos: BlockPos, st
     }
 }
 
+/* Debug block entities. Remove later. */
 class BatteryBlockEntity(pos: BlockPos, state: BlockState) : ElectricalBlockEntity(HorizonsBlockEntities.BATTERY.get(), pos, state) {
     override fun createPowerNode() = VoltageSourceNode(12.0)
 }

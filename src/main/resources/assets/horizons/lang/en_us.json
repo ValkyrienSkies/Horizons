@@ -1,5 +1,8 @@
 {
   "block.horizons.battery": "Battery",
+  "block.horizons.debug_ac_source": "Debug AC Power Source",
+  "tooltip.horizons.debug_ac_source": "%s V peak, %s Hz sine wave.",
+  "block.horizons.voltaic_pile": "Voltaic Pile",
   "block.horizons.switch": "Switch",
   "block.horizons.resistor": "Resistor",
   "block.horizons.lamp": "Lamp",
