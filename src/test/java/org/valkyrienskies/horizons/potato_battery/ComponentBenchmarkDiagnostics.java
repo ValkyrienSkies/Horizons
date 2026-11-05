@@ -87,7 +87,8 @@ public final class ComponentBenchmarkDiagnostics {
   private static BenchmarkResult benchmarkResistorLadder(IPBSolver solver, int iterations) {
     FixedVoltageNode source = new FixedVoltageNode(10.0);
     GroundNode ground = new GroundNode();
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solver);
+    PowerNetworkServer network = new PowerNetworkServer(solver);
+    network.markLoaded();
     addNode(network, 0, source);
     ResistorNode[] resistors = new ResistorNode[64];
     for (int i = 0; i < resistors.length; i++) {
@@ -113,7 +114,8 @@ public final class ComponentBenchmarkDiagnostics {
     JunctionNode groundBus = new JunctionNode(height + 1);
     JunctionNode[][] grid = new JunctionNode[width][height];
 
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solver);
+    PowerNetworkServer network = new PowerNetworkServer(solver);
+    network.markLoaded();
     addNode(network, 0, source);
     addNode(network, 1, sourceBus);
     addNode(network, 2, ground);
@@ -201,7 +203,8 @@ public final class ComponentBenchmarkDiagnostics {
     FixedVoltageNode source = new FixedVoltageNode(5.0);
     GroundNode ground = new GroundNode();
     JunctionNode bus = new JunctionNode(20);
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solver);
+    PowerNetworkServer network = new PowerNetworkServer(solver);
+    network.markLoaded();
     addNode(network, 0, source);
     addNode(network, 1, ground);
     addNode(network, 2, bus);
@@ -223,7 +226,8 @@ public final class ComponentBenchmarkDiagnostics {
   private static BenchmarkResult benchmarkNpnInverterChain(IPBSolver solver, int iterations) {
     FixedVoltageNode source = new FixedVoltageNode(5.0);
     GroundNode ground = new GroundNode();
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solver);
+    PowerNetworkServer network = new PowerNetworkServer(solver);
+    network.markLoaded();
     addNode(network, 0, source);
     addNode(network, 1, ground);
     FixedVoltageNode input = new FixedVoltageNode(5.0);
@@ -256,7 +260,8 @@ public final class ComponentBenchmarkDiagnostics {
   private static BenchmarkResult benchmarkNmosSwitchBank(IPBSolver solver, int iterations) {
     FixedVoltageNode source = new FixedVoltageNode(5.0);
     GroundNode ground = new GroundNode();
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solver);
+    PowerNetworkServer network = new PowerNetworkServer(solver);
+    network.markLoaded();
     addNode(network, 0, source);
     addNode(network, 1, ground);
     int nextX = 2;
@@ -279,11 +284,11 @@ public final class ComponentBenchmarkDiagnostics {
 
   private static BenchmarkResult benchmarkNetwork(PowerNetworkServer network, int iterations, int nodeCount) {
     for (int i = 0; i < 8; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
     }
     long start = System.nanoTime();
     for (int i = 0; i < iterations; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
     }
     long elapsed = System.nanoTime() - start;
     double averageMicros = (double) elapsed / iterations / TimeUnit.MICROSECONDS.toNanos(1);

@@ -1,0 +1,244 @@
+{
+  "variants": {
+    "facing=north,light=0": {
+      "model": "horizons:block/lamp"
+    },
+    "facing=north,light=1": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=north,light=2": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=north,light=3": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=north,light=4": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=north,light=5": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=north,light=6": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=north,light=7": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=north,light=8": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=north,light=9": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=north,light=10": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=north,light=11": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=north,light=12": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=north,light=13": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=north,light=14": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=north,light=15": {
+      "model": "horizons:block/lamp_on"
+    },
+    "facing=east,light=0": {
+      "model": "horizons:block/lamp",
+      "y": 90
+    },
+    "facing=east,light=1": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=east,light=2": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=east,light=3": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=east,light=4": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=east,light=5": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=east,light=6": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=east,light=7": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=east,light=8": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=east,light=9": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=east,light=10": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=east,light=11": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=east,light=12": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=east,light=13": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=east,light=14": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=east,light=15": {
+      "model": "horizons:block/lamp_on",
+      "y": 90
+    },
+    "facing=south,light=0": {
+      "model": "horizons:block/lamp",
+      "y": 180
+    },
+    "facing=south,light=1": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=south,light=2": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=south,light=3": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=south,light=4": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=south,light=5": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=south,light=6": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=south,light=7": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=south,light=8": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=south,light=9": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=south,light=10": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=south,light=11": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=south,light=12": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=south,light=13": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=south,light=14": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=south,light=15": {
+      "model": "horizons:block/lamp_on",
+      "y": 180
+    },
+    "facing=west,light=0": {
+      "model": "horizons:block/lamp",
+      "y": 270
+    },
+    "facing=west,light=1": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    },
+    "facing=west,light=2": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    },
+    "facing=west,light=3": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    },
+    "facing=west,light=4": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    },
+    "facing=west,light=5": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    },
+    "facing=west,light=6": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    },
+    "facing=west,light=7": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    },
+    "facing=west,light=8": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    },
+    "facing=west,light=9": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    },
+    "facing=west,light=10": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    },
+    "facing=west,light=11": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    },
+    "facing=west,light=12": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    },
+    "facing=west,light=13": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    },
+    "facing=west,light=14": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    },
+    "facing=west,light=15": {
+      "model": "horizons:block/lamp_on",
+      "y": 270
+    }
+  }
+}

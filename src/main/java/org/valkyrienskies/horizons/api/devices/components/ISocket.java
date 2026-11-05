@@ -28,6 +28,10 @@ public interface ISocket {
   double getConnectionMaxDistance();
 
   boolean isConnectedTo(ISocket other);
+  boolean canAcceptConnection(ISocket other);
+  /** Connection bookkeeping hooks; callers should use connect/disconnect. */
+  void onConnected(ISocket other);
+  void onDisconnected(ISocket other);
   void connect(ISocket other) throws SocketConnectionException;
   boolean disconnect(ISocket other);
 

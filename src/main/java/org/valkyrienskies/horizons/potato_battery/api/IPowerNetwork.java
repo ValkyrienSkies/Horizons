@@ -15,10 +15,18 @@ public interface IPowerNetwork<T extends Level> {
 
   IPBSolver getSolver();
   Collection<IPowerNode> getNodes();
+  default boolean hasNodes() { return !getNodes().isEmpty(); }
   double getTimeStepSeconds();
 
-  void addNode(BlockPos pos, IPowerNode node);
+  /** Allocates a network-local ID immediately; registration happens on the simulation thread. */
+  long addNode(IPowerNode node);
+  long addNode(BlockPos pos, IPowerNode node);
   void removeNode(BlockPos pos);
+  void removeNode(long id);
+  @Nullable IPowerNode getNode(long id);
+
+  /** Runs an electrical change between solves and invalidates cached topology. */
+  void updateTopology(Runnable change);
 
   void tick(T level);
   void physTick(PhysLevel physLevel);
@@ -38,6 +46,11 @@ public interface IPowerNetwork<T extends Level> {
   double getCurrentOver(IPowerNode nodeA, @Nullable IPowerNode nodeB, int port, int otherPort);
 
   double getVoltageAt(IPowerNode node, int port);
+
+  /** Signed voltage at A relative to B. Server implementations sample a single published solve. */
+  default double getVoltageBetween(IPowerNode nodeA, int portA, IPowerNode nodeB, int portB) {
+    return getVoltageAt(nodeA, portA) - getVoltageAt(nodeB, portB);
+  }
 
   NodeEnergyData getNodeEnergyData(IPowerNode node, int port);
 

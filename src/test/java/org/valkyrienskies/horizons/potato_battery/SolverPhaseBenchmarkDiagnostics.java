@@ -78,7 +78,7 @@ public final class SolverPhaseBenchmarkDiagnostics {
   ) {
     PowerNetworkServer network = factory.create(solver);
     for (int i = 0; i < 6; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
     }
 
     long wallNanos = 0L;
@@ -145,7 +145,8 @@ public final class SolverPhaseBenchmarkDiagnostics {
     FixedVoltageNode source = new FixedVoltageNode(5.0);
     GroundNode ground = new GroundNode();
     JunctionNode bus = new JunctionNode(20);
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solver);
+    PowerNetworkServer network = new PowerNetworkServer(solver);
+    network.markLoaded();
     addNode(network, 0, source);
     addNode(network, 1, ground);
     addNode(network, 2, bus);
@@ -167,7 +168,8 @@ public final class SolverPhaseBenchmarkDiagnostics {
   private static PowerNetworkServer buildNmosSwitchBank(IPBSolver solver) {
     FixedVoltageNode source = new FixedVoltageNode(5.0);
     GroundNode ground = new GroundNode();
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solver);
+    PowerNetworkServer network = new PowerNetworkServer(solver);
+    network.markLoaded();
     addNode(network, 0, source);
     addNode(network, 1, ground);
     int nextX = 2;

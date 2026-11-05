@@ -27,6 +27,11 @@ public class JKLUSolver extends AbstractStampingSolver {
     }
   }
 
+  @Override public synchronized void invalidateTopology(org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork<?> network) {
+    super.invalidateTopology(network);
+    if (!network.hasNodes()) invalidateCache();
+  }
+
   @Override
   protected double voltageConvergence() {
     return JKLU_VOLTAGE_CONVERGENCE;

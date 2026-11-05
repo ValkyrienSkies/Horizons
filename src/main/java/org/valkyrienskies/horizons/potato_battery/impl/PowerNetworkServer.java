@@ -1,10 +1,8 @@
 package org.valkyrienskies.horizons.potato_battery.impl;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraftforge.fml.loading.FMLEnvironment;
 import org.valkyrienskies.core.api.world.PhysLevel;
 import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork;
 import org.valkyrienskies.horizons.potato_battery.api.network.IPBSolver;
@@ -19,6 +17,9 @@ import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyCacheableNetwork {
   private static final int MIN_DYNAMIC_NONLINEAR_SUBSTEPS = 4;
@@ -36,14 +37,17 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
 
   private final IPBSolver solver;
 
-  private final Long2ObjectOpenHashMap<IPowerNode> nodes = new Long2ObjectOpenHashMap<>();
+  private final ConcurrentHashMap<Long, IPowerNode> nodes = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<Long, Long> positionIds = new ConcurrentHashMap<>();
+  private final AtomicLong nextNodeId = new AtomicLong();
+  private double timeStepSeconds = DEFAULT_TIME_STEP;
 
   private volatile HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> publishedNodeEnergyData = new HashMap<>();
   private HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> stagingNodeEnergyData = new HashMap<>();
   private @Nullable Thread solveThread;
   private boolean solveInProgress;
 
-  private final ConcurrentLinkedQueue<QueuedChange> updateQueue = new ConcurrentLinkedQueue<>();
+  private final ConcurrentLinkedQueue<Runnable> updateQueue = new ConcurrentLinkedQueue<>();
   private boolean topologyDirty = true;
   private long topologyRevision;
   private boolean sleeping;
@@ -80,22 +84,146 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
 
   @Override
   public Collection<IPowerNode> getNodes() {
-    return nodes.values();
+    return java.util.List.copyOf(nodes.values());
   }
+
+  @Override public boolean hasNodes() { return !nodes.isEmpty(); }
 
   @Override
   public double getTimeStepSeconds() {
-    return DEFAULT_TIME_STEP;
+    return timeStepSeconds;
   }
 
   @Override
-  public void addNode(BlockPos pos, IPowerNode node) {
-    updateQueue.add(new QueuedChange(pos, node));
+  public long addNode(IPowerNode node) {
+    long id = allocateNodeId();
+    updateTopology(() -> {
+      nodes.put(id, node);
+      node.onAdded();
+    });
+    return id;
+  }
+
+  @Override
+  public long addNode(BlockPos pos, IPowerNode node) {
+    long id = addNode(node);
+    Long previous = positionIds.put(pos.asLong(), id);
+    if (previous != null) removeNode(previous);
+    return id;
   }
 
   @Override
   public void removeNode(BlockPos pos) {
-    updateQueue.add(new QueuedChange(pos, null));
+    Long id = positionIds.remove(pos.asLong());
+    if (id != null) removeNode(id);
+  }
+
+  @Override
+  public void removeNode(long id) {
+    updateTopology(() -> detachNode(id, true));
+  }
+
+  private void detachNode(long id, boolean permanent) {
+    detachNodes(java.util.Set.of(id), permanent);
+  }
+
+  private void detachNodes(java.util.Collection<Long> ids, boolean permanent) {
+    java.util.Set<IPowerNode> removed = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+    for (long id : ids) {
+      IPowerNode node = nodes.remove(id);
+      if (node != null) removed.add(node);
+    }
+    if (removed.isEmpty()) return;
+    positionIds.values().removeIf(ids::contains);
+    for (IPowerNode node : nodes.values()) {
+      for (int port = 0; port < node.getPorts(); port++) {
+        for (var connection : node.getConnections(port)) {
+          if (removed.contains(connection.node())) node.removeConnection(connection, port);
+        }
+      }
+    }
+    for (IPowerNode node : removed) {
+      node.removeAllConnections();
+      if (permanent) node.onRemoved();
+    }
+    HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> remaining = new HashMap<>(publishedNodeEnergyData);
+    removed.forEach(remaining::remove);
+    publishedNodeEnergyData = remaining;
+    stagingNodeEnergyData = new HashMap<>();
+  }
+
+  public long allocateNodeId() {
+    long id = nextNodeId.getAndUpdate(value -> {
+      if (value == Long.MAX_VALUE) throw new IllegalStateException("Power node IDs exhausted");
+      return value + 1;
+    });
+    return id;
+  }
+
+  public long getNextNodeId() { return nextNodeId.get(); }
+
+  /** Advance the allocator past restored IDs, including nodes that are not currently active. */
+  public void reserveNodeIdsThrough(long id) {
+    if (id < 0 || id == Long.MAX_VALUE) throw new IllegalArgumentException("Invalid node ID " + id);
+    nextNodeId.accumulateAndGet(id + 1, Math::max);
+  }
+
+  /** Restores an already allocated identity, without waiting for another simulation step. */
+  public synchronized void restoreNode(long id, IPowerNode node) {
+    applyPendingChanges();
+    reserveNodeIdsThrough(id);
+    if (nodes.putIfAbsent(id, node) != null) throw new IllegalStateException("Duplicate active node " + id);
+    node.onAdded();
+    invalidateTopology();
+  }
+
+  /** Removes only the live instance. Persistence owns the frozen state and logical connections. */
+  public synchronized void suspendNode(long id) {
+    suspendNodes(java.util.Set.of(id));
+  }
+
+  public synchronized void suspendNodes(java.util.Collection<Long> ids) {
+    applyPendingChanges();
+    detachNodes(ids, false);
+    invalidateTopology();
+  }
+
+  /** Snapshot/restore barrier. The callback must not access Minecraft worlds or block entities. */
+  public synchronized <T> T withState(Supplier<T> action) {
+    applyPendingChanges();
+    try {
+      return action.get();
+    } finally {
+      applyPendingChanges();
+    }
+  }
+
+  private void invalidateTopology() {
+    solver.invalidateTopology(this);
+    topologyDirty = true;
+    topologyRevision++;
+    sleeping = false;
+    settleConfirmationSolvesRemaining = 1;
+  }
+
+  private void applyPendingChanges() {
+    boolean changed = false;
+    Runnable change;
+    while ((change = updateQueue.poll()) != null) {
+      change.run();
+      changed = true;
+    }
+    if (changed) invalidateTopology();
+  }
+
+  @Override
+  public @Nullable IPowerNode getNode(long id) {
+    return nodes.get(id);
+  }
+
+  @Override
+  public void updateTopology(Runnable change) {
+    updateQueue.add(change);
   }
 
   @Override
@@ -109,34 +237,14 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
   }
 
   @Override
-  public void energyTick(double timeStep) {
+  public synchronized void energyTick(double timeStep) {
       if (!loaded) {
           return;
       }
 
-    boolean hadQueuedChanges = !updateQueue.isEmpty();
-    updateQueue.forEach(change -> {
-      if (change.node == null) {
-        IPowerNode removed = nodes.remove(change.pos.asLong());
-        if (removed != null) {
-          publishedNodeEnergyData.remove(removed);
-          stagingNodeEnergyData.remove(removed);
-          removed.onRemoved();
-        }
-      } else {
-        nodes.put(change.pos.asLong(), change.node);
-        publishedNodeEnergyData.putIfAbsent(change.node, new Long2ObjectOpenHashMap<>(change.node.getPorts()));
-        change.node.onAdded();
-      }
-    });
-
-    updateQueue.clear();
-    if (hadQueuedChanges) {
-      topologyDirty = true;
-      topologyRevision++;
-      sleeping = false;
-      settleConfirmationSolvesRemaining = 1;
-    }
+    if (!Double.isFinite(timeStep) || timeStep <= 0) throw new IllegalArgumentException("Invalid time step");
+    timeStepSeconds = timeStep;
+    applyPendingChanges();
 
     SimulationPolicy simulationPolicy = classifySimulationPolicy();
     lastRequestedSubsteps = simulationPolicy.subSteps;
@@ -214,6 +322,14 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
   @Override
   public double getVoltageAt(IPowerNode node, int port) {
     return getNodeEnergyData(node, port).getVoltage();
+  }
+
+  @Override
+  public double getVoltageBetween(IPowerNode nodeA, int portA, IPowerNode nodeB, int portB) {
+    var snapshot = publishedNodeEnergyData;
+    NodeEnergyData a = getNodeEnergyData(snapshot, nodeA, portA);
+    NodeEnergyData b = getNodeEnergyData(snapshot, nodeB, portB);
+    return (a == null ? 0 : a.getVoltage()) - (b == null ? 0 : b.getVoltage());
   }
 
   @Override
@@ -358,20 +474,18 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
     return fingerprint;
   }
 
-  private record QueuedChange(BlockPos pos, @Nullable IPowerNode node) {}
   private record ConnectionLookup(org.valkyrienskies.horizons.potato_battery.api.network.Connection connection) {}
   private record SimulationPolicy(PowerNodeSimulationMode mode, int subSteps, int requestedSubSteps) {}
 
   private void beginSolveSnapshot() {
-    stagingNodeEnergyData.clear();
+    // Published maps remain immutable so game-thread readers can safely retain a snapshot.
+    stagingNodeEnergyData = new HashMap<>();
     solveThread = Thread.currentThread();
     solveInProgress = true;
   }
 
   private void publishSolveSnapshot() {
-    HashMap<IPowerNode, Long2ObjectOpenHashMap<NodeEnergyData>> oldPublished = publishedNodeEnergyData;
     publishedNodeEnergyData = stagingNodeEnergyData;
-    stagingNodeEnergyData = oldPublished;
     solveInProgress = false;
     solveThread = null;
   }

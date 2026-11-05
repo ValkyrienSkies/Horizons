@@ -1,0 +1,20 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "horizons:block/battery_socket",
+      "y": 0
+    },
+    "facing=east": {
+      "model": "horizons:block/battery_socket",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "horizons:block/battery_socket",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "horizons:block/battery_socket",
+      "y": 270
+    }
+  }
+}
