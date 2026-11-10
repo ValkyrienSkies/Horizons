@@ -19,13 +19,21 @@ object HorizonsNetworking {
     @JvmStatic
     val NetworkingChannel: SimpleChannel = NetworkRegistry.newSimpleChannel(
         ResourceLocation.fromNamespaceAndPath(Horizons.MOD_ID, "main"),
-        Supplier { "1" },
-        "1"::equals,
-        "1"::equals
+        Supplier { "2" },
+        "2"::equals,
+        "2"::equals
     )
 
     init {
         var id = 0
+        NetworkingChannel.registerMessage(id++, org.valkyrienskies.horizons.content.circuit.CircuitFeedbackPacket::class.java,
+            org.valkyrienskies.horizons.content.circuit.CircuitFeedbackPacket::encode,
+            org.valkyrienskies.horizons.content.circuit.CircuitFeedbackPacket::decode,
+            org.valkyrienskies.horizons.content.circuit.CircuitFeedbackPacket::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT))
+        NetworkingChannel.registerMessage(id++, org.valkyrienskies.horizons.content.circuit.CircuitEditPacket::class.java,
+            org.valkyrienskies.horizons.content.circuit.CircuitEditPacket::encode,
+            org.valkyrienskies.horizons.content.circuit.CircuitEditPacket::decode,
+            org.valkyrienskies.horizons.content.circuit.CircuitEditPacket::handle, Optional.of(NetworkDirection.PLAY_TO_SERVER))
         NetworkingChannel.registerMessage(id++, org.valkyrienskies.horizons.impl.rigging.RigBodyPacket::class.java,
             org.valkyrienskies.horizons.impl.rigging.RigBodyPacket::encode,
             org.valkyrienskies.horizons.impl.rigging.RigBodyPacket::decode,

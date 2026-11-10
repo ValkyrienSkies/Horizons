@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "horizons:block/circuit_box"
+    },
+    "facing=east": {
+      "model": "horizons:block/circuit_box",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "horizons:block/circuit_box",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "horizons:block/circuit_box",
+      "y": 270
+    }
+  }
+}

@@ -2,6 +2,7 @@ package org.valkyrienskies.horizons.potato_battery.api.persistence;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
+import org.valkyrienskies.horizons.content.circuit.simulation.CircuitBoardNode;
 import org.valkyrienskies.horizons.potato_battery.api.network.node.IPowerNode;
 import org.valkyrienskies.horizons.potato_battery.impl.nodes.ResistorNode;
 import org.valkyrienskies.horizons.potato_battery.impl.nodes.SwitchNode;
@@ -21,6 +22,8 @@ public final class PowerNodeTypes {
   private static final Map<ResourceLocation, PowerNodeType<?>> BY_ID = new HashMap<>();
   private static final Map<Class<?>, PowerNodeType<?>> BY_CLASS = new HashMap<>();
   static {
+    builtin("circuit_board", CircuitBoardNode.class, CircuitBoardNode::readState,
+        (node, tag) -> tag.merge(node.writeState()));
     builtin("battery_socket", BatterySocketNode.class, tag -> {
       BatterySocketNode node = new BatterySocketNode();
       if (tag.contains("Cell")) {

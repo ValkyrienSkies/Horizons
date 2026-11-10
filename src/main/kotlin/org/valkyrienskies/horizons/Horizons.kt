@@ -41,9 +41,11 @@ object Horizons {
         HorizonsItems.register()
         HorizonsBlockEntities.register()
         HorizonsSounds.register()
+        org.valkyrienskies.horizons.content.circuit.CircuitContent.register(MOD_BUS)
 
         MOD_BUS.addListener(::commonInit)
         if (FMLEnvironment.dist.isClient) {
+            MOD_BUS.addListener(org.valkyrienskies.horizons.content.circuit.client.CircuitBoxScreen::registerKeys)
             MOD_BUS.addListener(HorizonsClient::clientInit)
             MOD_BUS.addListener(org.valkyrienskies.horizons.content.client.RigBodyRenderer::models)
         }

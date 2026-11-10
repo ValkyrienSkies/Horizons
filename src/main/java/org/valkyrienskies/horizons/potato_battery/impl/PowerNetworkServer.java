@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import org.valkyrienskies.core.api.world.PhysLevel;
 import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork;
+import org.valkyrienskies.horizons.content.circuit.simulation.CompositePowerNode;
 import org.valkyrienskies.horizons.potato_battery.api.network.IPBSolver;
 import org.valkyrienskies.horizons.potato_battery.api.network.NodeEnergyData;
 import org.valkyrienskies.horizons.potato_battery.api.network.node.IPowerNode;
@@ -38,6 +39,7 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
   private final IPBSolver solver;
 
   private final ConcurrentHashMap<Long, IPowerNode> nodes = new ConcurrentHashMap<>();
+  private final java.util.IdentityHashMap<CompositePowerNode, java.util.List<Long>> compositeChildren = new java.util.IdentityHashMap<>();
   private final ConcurrentHashMap<Long, Long> positionIds = new ConcurrentHashMap<>();
   private final AtomicLong nextNodeId = new AtomicLong();
   private double timeStepSeconds = DEFAULT_TIME_STEP;
@@ -100,6 +102,7 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
     updateTopology(() -> {
       nodes.put(id, node);
       node.onAdded();
+      attachChildren(node);
     });
     return id;
   }
@@ -128,13 +131,23 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
   }
 
   private void detachNodes(java.util.Collection<Long> ids, boolean permanent) {
+    java.util.Set<Long> expanded = new java.util.HashSet<>(ids);
+    java.util.ArrayDeque<Long> pending = new java.util.ArrayDeque<>(ids);
+    while (!pending.isEmpty()) {
+      IPowerNode node = nodes.get(pending.remove());
+      if (node instanceof CompositePowerNode composite) {
+        var children = compositeChildren.remove(composite);
+        if (children != null) for (long child : children) if (expanded.add(child)) pending.add(child);
+        composite.onNetworkDetached();
+      }
+    }
     java.util.Set<IPowerNode> removed = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-    for (long id : ids) {
+    for (long id : expanded) {
       IPowerNode node = nodes.remove(id);
       if (node != null) removed.add(node);
     }
     if (removed.isEmpty()) return;
-    positionIds.values().removeIf(ids::contains);
+    positionIds.values().removeIf(expanded::contains);
     for (IPowerNode node : nodes.values()) {
       for (int port = 0; port < node.getPorts(); port++) {
         for (var connection : node.getConnections(port)) {
@@ -174,7 +187,34 @@ public class PowerNetworkServer implements IPowerNetwork<ServerLevel>, TopologyC
     reserveNodeIdsThrough(id);
     if (nodes.putIfAbsent(id, node) != null) throw new IllegalStateException("Duplicate active node " + id);
     node.onAdded();
+    attachChildren(node);
     invalidateTopology();
+  }
+
+  private void attachChildren(IPowerNode node) {
+    if (!(node instanceof CompositePowerNode composite)) return;
+    composite.onNetworkAttached(this);
+    java.util.List<Long> ids = new java.util.ArrayList<>();
+    compositeChildren.put(composite, ids);
+    for (IPowerNode child : composite.getChildren()) {
+      long id = allocateNodeId();
+      ids.add(id);
+      nodes.put(id, child);
+      child.onAdded();
+      attachChildren(child);
+    }
+  }
+
+  public void replaceCompositeChildren(CompositePowerNode composite, Runnable replacement) {
+    withState(() -> {
+      var ids = compositeChildren.remove(composite);
+      if (ids == null) throw new IllegalStateException("Composite is not attached to this network");
+      detachNodes(ids, true);
+      replacement.run();
+      attachChildren(composite);
+      invalidateTopology();
+      return null;
+    });
   }
 
   /** Removes only the live instance. Persistence owns the frozen state and logical connections. */

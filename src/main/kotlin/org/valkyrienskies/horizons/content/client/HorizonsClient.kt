@@ -37,6 +37,11 @@ object HorizonsClient {
 
     @JvmStatic
     fun clientInit(event: FMLClientSetupEvent) {
+        event.enqueueWork {
+            net.minecraft.client.gui.screens.MenuScreens.register(
+                org.valkyrienskies.horizons.content.circuit.CircuitContent.MENU.get(),
+            ) { menu, inventory, title -> org.valkyrienskies.horizons.content.circuit.client.CircuitBoxScreen(menu, inventory, title) }
+        }
         // Put anything initialized on forge-side client here.
         // Kotlin for Forge auto-subscribes Kotlin objects, so register this Java listener explicitly.
         EVENT_BUS.addListener(DeviceDebugRenderer::render)
