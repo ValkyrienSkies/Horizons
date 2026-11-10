@@ -406,7 +406,13 @@ public class CircuitBoxScreen extends AbstractContainerScreen<CircuitBoxMenu> {
             } else {
                 Point point = pointAt(mouseX, mouseY);
                 if (point != null && (point.y() == -1 || point.y() == 11)) {
-                    graphics.renderTooltip(font, Component.literal("External socket (" + point.x() + ", " + point.y() + ")"), mouseX, mouseY);
+                    for (int port = 0; port < 8; port++) {
+                        if (CircuitDesign.socket(port).equals(point)) {
+                            graphics.renderTooltip(font, Component.literal((point.y() == -1 ? "Top" : "Bottom")
+                                + " socket · cable port " + port + " (viewed from front)"), mouseX, mouseY);
+                            break;
+                        }
+                    }
                 }
             }
         }

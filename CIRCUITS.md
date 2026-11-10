@@ -2,6 +2,8 @@
 
 Circuit boxes are gameplay blocks (`horizons:circuit_box`) using the supplied pin-board model. They face north, east, south, or west. Four upper and four lower sockets connect the editor to the world's electrical network.
 
+The editor shows the sockets as seen facing the front of the box. From left to right, the top sockets have cable port IDs 3, 2, 1, 0; the bottom sockets have IDs 7, 6, 5, 4. Hover an editor socket to see its cable port ID. These IDs remain attached to the same physical terminals when the block rotates.
+
 ## Editing
 
 - Right-click the box to open its 11 × 11 board. The left list contains circuit component items in your inventory.

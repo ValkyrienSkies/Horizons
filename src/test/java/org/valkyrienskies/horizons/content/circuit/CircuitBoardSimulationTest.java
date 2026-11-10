@@ -41,6 +41,37 @@ class CircuitBoardSimulationTest {
   private static void settle(PowerNetworkServer network) { for (int tick = 0; tick < 20; tick++) network.energyTick(0.05); }
 
   @ParameterizedTest @MethodSource("solvers")
+  void wireOnlyBoxPowersLampThroughFrontLeftSockets(Supplier<IPBSolver> solver) {
+    PowerNetworkServer network = network(solver.get());
+    PowerNetworkArchive archive = new PowerNetworkArchive(network, () -> {});
+    CircuitDesign design = new CircuitDesign(List.of(), List.of(wire(new Point(1, -1), new Point(1, 11))));
+    var board = archive.attach(new BlockPos(0, 64, 0), "test:circuit_box", -1, () -> new CircuitBoardNode(design));
+    var battery = archive.attach(new BlockPos(2, 64, 0), "test:battery", -1, () -> new VoltageSourceNode(12));
+    var lamp = archive.attach(new BlockPos(4, 64, 0), "test:lamp", -1, () -> new ResistorNode(1.44));
+    archive.connect(battery.id(), 0, board.id(), 3, 1e-6);
+    archive.connect(board.id(), 7, lamp.id(), 0, 1e-6);
+    archive.connect(lamp.id(), 1, battery.id(), 1, 1e-6);
+    settle(network);
+    assertEquals(12, network.getVoltageBetween(lamp.node(), 0, lamp.node(), 1), 1e-3);
+    assertEquals(100, ((ResistorNode) lamp.node()).getDissipatedPower(network), 0.01);
+    CircuitBoardNode node = (CircuitBoardNode) board.node();
+    node.setDesign(new CircuitDesign(List.of(), List.of(wire(new Point(9, -1), new Point(9, 11)))));
+    settle(network);
+    assertEquals(0, network.getVoltageBetween(lamp.node(), 0, lamp.node(), 1), 1e-6);
+    node.setDesign(design);
+    settle(network);
+    assertEquals(12, network.getVoltageBetween(lamp.node(), 0, lamp.node(), 1), 1e-3);
+    CompoundTag saved = archive.write(new CompoundTag());
+    PowerNetworkServer restored = network(solver.get());
+    PowerNetworkArchive restoredArchive = new PowerNetworkArchive(restored, () -> {});
+    restoredArchive.read(saved);
+    restoredArchive.activateChunk(PowerNetworkArchive.chunkOf(new BlockPos(0, 64, 0)));
+    settle(restored);
+    IPowerNode restoredLamp = restored.getNode(lamp.id());
+    assertEquals(12, restored.getVoltageBetween(restoredLamp, 0, restoredLamp, 1), 1e-3);
+  }
+
+  @ParameterizedTest @MethodSource("solvers")
   void realResistorChildrenShareNetworkAndEditsKeepExternalCables(Supplier<IPBSolver> solver) {
     PowerNetworkServer network = network(solver.get());
     CircuitBoardNode board = new CircuitBoardNode(twoTerminal("resistor"));

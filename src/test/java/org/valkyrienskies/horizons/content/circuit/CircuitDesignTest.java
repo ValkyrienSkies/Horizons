@@ -35,8 +35,17 @@ class CircuitDesignTest {
     assertTrue(CircuitDesign.bodies(new Placed("resistor", 5, 5, 0)).isEmpty());
     assertEquals(List.of(new Point(5, 5)), CircuitDesign.bodies(new Placed("or_gate", 5, 5, 0)));
     assertEquals(List.of(new Point(4, 4), new Point(4, 6), new Point(6, 5)), CircuitDesign.pins(new Placed("and_gate", 5, 5, 0)));
-    assertEquals(new Point(9, 11), CircuitDesign.socket(7));
+    assertEquals(new Point(1, 11), CircuitDesign.socket(7));
     assertThrows(IllegalArgumentException.class, () -> CircuitDesign.socket(8));
+  }
+
+  @Test void socketsMatchTheModelWhenViewedFromTheFront() {
+    int[] frontColumns = {1, 4, 6, 9};
+    for (int column = 0; column < frontColumns.length; column++) {
+      int modelPort = 3 - column;
+      assertEquals(new Point(frontColumns[column], -1), CircuitDesign.socket(modelPort));
+      assertEquals(new Point(frontColumns[column], 11), CircuitDesign.socket(modelPort + 4));
+    }
   }
 
   @Test void rejectsInvalidComponentsAndOverlapsButAllowsSharedPins() {

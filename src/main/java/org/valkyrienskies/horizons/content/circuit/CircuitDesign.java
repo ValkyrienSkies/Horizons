@@ -75,7 +75,7 @@ public record CircuitDesign(List<Placed> components, List<Wire> wires) {
 
   public static Point socket(int index) {
     if (index < 0 || index >= 8) throw new IllegalArgumentException("Invalid socket");
-    return new Point(new int[] {1, 4, 6, 9}[index % 4], index < 4 ? -1 : 11);
+    return new Point(new int[] {9, 6, 4, 1}[index % 4], index < 4 ? -1 : 11);
   }
 
   private static boolean inGrid(Point point) { return point != null && point.x >= 0 && point.x < SIZE && point.y >= 0 && point.y < SIZE; }
