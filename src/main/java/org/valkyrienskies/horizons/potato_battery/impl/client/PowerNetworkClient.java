@@ -34,8 +34,24 @@ public class PowerNetworkClient implements IPowerNetwork<ClientLevel> {
   }
 
   @Override
-  public void addNode(BlockPos pos, IPowerNode node) {
-    return;
+  public long addNode(IPowerNode node) {
+    throw new UnsupportedOperationException("Nodes are server-owned");
+  }
+
+  @Override
+  public long addNode(BlockPos pos, IPowerNode node) {
+    return addNode(node);
+  }
+
+  @Override
+  public void removeNode(long id) {}
+
+  @Override
+  public @Nullable IPowerNode getNode(long id) { return null; }
+
+  @Override
+  public void updateTopology(Runnable change) {
+    throw new UnsupportedOperationException("Nodes are server-owned");
   }
 
   @Override

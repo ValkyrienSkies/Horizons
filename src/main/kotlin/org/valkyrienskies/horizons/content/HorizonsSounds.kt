@@ -21,6 +21,8 @@ object HorizonsSounds {
     val CLICK_IN: RegistryObject<SoundEvent> = registerSoundEvent("click_in")
     val SWITCH_ON: RegistryObject<SoundEvent> = registerSoundEvent("switch_on")
     val SWITCH_OFF: RegistryObject<SoundEvent> = registerSoundEvent("switch_off")
+    val BATTERY_CONNECTED: RegistryObject<SoundEvent> = registerSoundEvent("battery_connected")
+    val BATTERY_DISCONNECTED: RegistryObject<SoundEvent> = registerSoundEvent("battery_disconnected")
 
     private fun registerSoundEvent(name: String): RegistryObject<SoundEvent> {
         val id = ResourceLocation.tryBuild(Horizons.MOD_ID, name)

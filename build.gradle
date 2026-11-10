@@ -95,6 +95,14 @@ repositories {
     }
 }
 
+// Plain Java libraries need explicit loading in Forge runs and embedding in the mod jar.
+configurations {
+    solverLibraries
+    implementation.extendsFrom solverLibraries
+    additionalRuntimeClasspath.extendsFrom solverLibraries
+    jarJar.extendsFrom solverLibraries
+}
+
 
 dependencies {
     // region mixins
@@ -122,8 +130,14 @@ dependencies {
 
     // region VS deps
     implementation "com.fasterxml.jackson.core:jackson-annotations:2.13.3"
-    implementation "org.ejml:ejml-dsparse:0.44.0"
-    implementation "com.github.rwl:JKLU:1.0.0"
+    // Declare the complete solver dependency set: Jar-in-Jar embeds direct dependencies.
+    solverLibraries "org.ejml:ejml-core:0.44.0"
+    solverLibraries "org.ejml:ejml-ddense:0.44.0"
+    solverLibraries "org.ejml:ejml-dsparse:0.44.0"
+    solverLibraries "com.github.rwl:JKLU:1.0.0"
+    solverLibraries "com.github.rwl:AMDJ:1.0.1"
+    solverLibraries "com.github.rwl:BTFJ:1.0.1"
+    solverLibraries "com.github.rwl:COLAMDJ:1.0.1"
     compileOnly("org.joml:joml:1.10.4")
     compileOnly("org.joml:joml-primitives:1.10.0")
     implementation("thedarkcolour:kotlinforforge:4.11.0")
@@ -200,6 +214,36 @@ tasks.withType(JavaCompile).configureEach {
 test {
     useJUnitPlatform()
 }
+
+tasks.register("verifySolverPackaging") {
+    group = "verification"
+    description = "Verify solver libraries are embedded and available to Forge runs"
+    dependsOn tasks.named("jar")
+    inputs.file(tasks.named("jar").flatMap { it.archiveFile })
+    inputs.files(configurations.solverLibraries, configurations.additionalRuntimeClasspath)
+    doLast {
+        def libraries = configurations.solverLibraries.files
+        if (!configurations.additionalRuntimeClasspath.files.containsAll(libraries)) {
+            throw new GradleException("Solver libraries are missing from the Forge runtime classpath")
+        }
+        def archive = tasks.named("jar").get().archiveFile.get().asFile
+        new java.util.zip.ZipFile(archive).withCloseable { zip ->
+            def metadataEntry = zip.getEntry("META-INF/jarjar/metadata.json")
+            if (metadataEntry == null) throw new GradleException("Solver Jar-in-Jar metadata is missing")
+            def metadata = zip.getInputStream(metadataEntry).withCloseable { stream ->
+                new groovy.json.JsonSlurper().parse(stream)
+            }
+            libraries.each { library ->
+                def path = "META-INF/jarjar/${library.name}"
+                if (zip.getEntry(path) == null || !metadata.jars.any { it.path == path }) {
+                    throw new GradleException("Solver library is not embedded: ${library.name}")
+                }
+            }
+        }
+    }
+}
+
+tasks.named("check") { dependsOn tasks.named("verifySolverPackaging") }
 
 tasks.register("runPowerNetworkVisualizer", JavaExec) {
     group = "verification"

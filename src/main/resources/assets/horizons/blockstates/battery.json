@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "horizons:block/vs_battery"
+    },
+    "facing=east": {
+      "model": "horizons:block/vs_battery",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "horizons:block/vs_battery",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "horizons:block/vs_battery",
+      "y": 270
+    }
+  }
+}

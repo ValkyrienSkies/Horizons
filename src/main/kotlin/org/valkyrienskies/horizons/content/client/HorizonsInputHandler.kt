@@ -12,6 +12,8 @@ import org.valkyrienskies.horizons.api.foundation.networking.bi_directional.Obje
 import org.valkyrienskies.horizons.api.foundation.networking.client_to_server.ObjectGrabAdjustPacket
 import org.valkyrienskies.horizons.content.HorizonsNetworking
 import org.valkyrienskies.horizons.content.ship_grabbing.PlayerGrabbingMixinDuck
+import org.valkyrienskies.horizons.impl.rigging.RigBodyManager
+import org.joml.Quaterniond
 import org.valkyrienskies.mod.api.getShipManagingBlock
 import org.valkyrienskies.mod.common.getShipManagingPos
 import org.valkyrienskies.mod.common.toWorldCoordinates
@@ -21,11 +23,23 @@ object HorizonsInputHandler {
     @SubscribeEvent
     fun handleMouseScroll(event: InputEvent.MouseScrollingEvent) {
         if (HorizonsClient.localPlayerGrabMode() && HorizonsClient.localPlayerGrabbed() != -1L) {
+            val local = Minecraft.getInstance().player
+            if (local != null && Minecraft.getInstance().options.keyShift.isDown) {
+                val grabber = local as PlayerGrabbingMixinDuck
+                val rotation = Quaterniond(grabber.getGrabbedObjectTarget().rotation ?: Quaterniond())
+                val angle = Math.toRadians(15.0 * event.scrollDelta)
+                if (Minecraft.getInstance().options.keySprint.isDown) rotation.rotateLocalY(angle) else rotation.rotateX(angle)
+                grabber.setGrabbedObjectTarget(-1.0, null, rotation)
+                HorizonsNetworking.sendToServer(ObjectGrabAdjustPacket(-1.0, null, rotation))
+                event.isCanceled = true
+                return
+            }
             if (Minecraft.getInstance().options.keySprint.isDown) {
                 val player = Minecraft.getInstance().player
                 if (player != null) {
                     val grabber = player as PlayerGrabbingMixinDuck
                     val newDistance = Mth.clamp(grabber.horizonsGrabbingState.grabbedObjectTarget.distance + event.scrollDelta, 2.0, 40.0)
+                    grabber.setGrabbedObjectTarget(newDistance, null, null)
                     HorizonsNetworking.sendToServer(ObjectGrabAdjustPacket(newDistance, null, null))
                     event.isCanceled = true
                 }
@@ -48,6 +62,13 @@ object HorizonsInputHandler {
                 (player as PlayerGrabbingMixinDuck).horizonsGrabbingState.grabbedObjectId = -1L
                 //event.isCanceled = true
             } else if (event.action == 0 && event.button == 1) {
+                val rig = player?.let { RigBodyManager.raycast(it) }
+                if (rig != null) {
+                    (player as PlayerGrabbingMixinDuck).tryGrab(rig.bodyId)
+                    HorizonsNetworking.sendToServer(ObjectGrabPacket(rig.bodyId))
+                    event.isCanceled = true
+                    return
+                }
                 val level = Minecraft.getInstance().level
                 val lastHit = Minecraft.getInstance().hitResult
                 var shipHit: Ship? = null

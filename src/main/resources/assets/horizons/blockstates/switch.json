@@ -1,0 +1,34 @@
+{
+  "variants": {
+    "facing=north,powered=false": {
+      "model": "horizons:block/vsh_switch"
+    },
+    "facing=north,powered=true": {
+      "model": "horizons:block/vsh_switch_on"
+    },
+    "facing=east,powered=false": {
+      "model": "horizons:block/vsh_switch",
+      "y": 90
+    },
+    "facing=east,powered=true": {
+      "model": "horizons:block/vsh_switch_on",
+      "y": 90
+    },
+    "facing=south,powered=false": {
+      "model": "horizons:block/vsh_switch",
+      "y": 180
+    },
+    "facing=south,powered=true": {
+      "model": "horizons:block/vsh_switch_on",
+      "y": 180
+    },
+    "facing=west,powered=false": {
+      "model": "horizons:block/vsh_switch",
+      "y": 270
+    },
+    "facing=west,powered=true": {
+      "model": "horizons:block/vsh_switch_on",
+      "y": 270
+    }
+  }
+}

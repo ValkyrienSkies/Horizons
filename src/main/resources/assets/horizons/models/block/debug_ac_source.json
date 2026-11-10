@@ -1,0 +1,34 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "body": "minecraft:block/blue_concrete",
+    "contact": "minecraft:block/iron_block",
+    "particle": "minecraft:block/blue_concrete"
+  },
+  "elements": [
+    {
+      "from": [1, 0, 1], "to": [15, 14, 15],
+      "faces": {
+        "north": { "texture": "#body" }, "east": { "texture": "#body" },
+        "south": { "texture": "#body" }, "west": { "texture": "#body" },
+        "up": { "texture": "#body" }, "down": { "texture": "#body" }
+      }
+    },
+    {
+      "from": [3, 14, 6], "to": [7, 16, 10],
+      "faces": {
+        "north": { "texture": "#contact" }, "east": { "texture": "#contact" },
+        "south": { "texture": "#contact" }, "west": { "texture": "#contact" },
+        "up": { "texture": "#contact" }, "down": { "texture": "#contact" }
+      }
+    },
+    {
+      "from": [9, 14, 6], "to": [13, 16, 10],
+      "faces": {
+        "north": { "texture": "#contact" }, "east": { "texture": "#contact" },
+        "south": { "texture": "#contact" }, "west": { "texture": "#contact" },
+        "up": { "texture": "#contact" }, "down": { "texture": "#contact" }
+      }
+    }
+  ]
+}

@@ -119,7 +119,8 @@ public final class CircuitComponents {
     private final double timeStepSeconds;
 
     public FixedStepNetwork(IPBSolver solver, double timeStepSeconds) {
-      super(null, null, solver);
+      super(solver);
+      markLoaded();
       this.timeStepSeconds = timeStepSeconds;
     }
 

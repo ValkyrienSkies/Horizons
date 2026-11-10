@@ -31,10 +31,8 @@ public class ObjectGrabPacket {
                 if (packet.yeet) {
                     grabber.tryThrow(packet.grabbedObject);
                 } else {
-                    boolean success = grabber.tryGrab(packet.grabbedObject);
-                    if (success) {
-                        HorizonsNetworking.sendToClient(new ClientboundObjectGrabPacket(grabber.getGrabbedObjectId()), sender);
-                    }
+                    grabber.tryGrab(packet.grabbedObject);
+                    HorizonsNetworking.sendToClient(new ClientboundObjectGrabPacket(grabber.getGrabbedObjectId()), sender);
                 }
             }
         });

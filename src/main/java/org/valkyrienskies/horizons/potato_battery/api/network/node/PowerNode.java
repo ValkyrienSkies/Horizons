@@ -42,7 +42,7 @@ public abstract class PowerNode implements IPowerNode {
 
   @Override
   public boolean removeConnection(IPowerNode node, int port, int otherPort) {
-    return this.connections.get(port) != null && this.connections.get(port).remove(new Connection(node, otherPort));
+    return this.connections.get(port) != null && this.connections.get(port).removeIf(c -> c.node() == node && c.port() == otherPort);
   }
 
   @Override

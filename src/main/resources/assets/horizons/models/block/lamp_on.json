@@ -1,0 +1,7 @@
+{
+  "parent": "horizons:block/lamp",
+  "textures": {
+    "0": "horizons:block/lamp_on",
+    "particle": "horizons:block/lamp_on"
+  }
+}

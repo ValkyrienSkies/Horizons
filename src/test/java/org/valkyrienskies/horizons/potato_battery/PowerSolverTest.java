@@ -61,7 +61,8 @@ class PowerSolverTest {
     ResistorNode resistorB = new ResistorNode(100.0);
     GroundNode ground = new GroundNode();
 
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    PowerNetworkServer network = new PowerNetworkServer(solverFactory.get());
+    network.markLoaded();
     addNode(network, 0, source);
     addNode(network, 1, resistorA);
     addNode(network, 2, resistorB);
@@ -70,7 +71,7 @@ class PowerSolverTest {
     connectBidirectional(source, 0, resistorA, 0, WIRE_RESISTANCE);
     connectBidirectional(resistorA, 1, resistorB, 0, WIRE_RESISTANCE);
     connectBidirectional(resistorB, 1, ground, 0, WIRE_RESISTANCE);
-    network.energyTick();
+    network.energyTick(network.getTimeStepSeconds());
 
     double expectedCurrent = SUPPLY_VOLTAGE / (200.0 + 3.0 * WIRE_RESISTANCE);
     double expectedMidpoint = expectedCurrent * (100.0 + WIRE_RESISTANCE);
@@ -87,7 +88,8 @@ class PowerSolverTest {
     ResistorNode load = new ResistorNode(5.0);
     GroundNode ground = new GroundNode();
 
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    PowerNetworkServer network = new PowerNetworkServer(solverFactory.get());
+    network.markLoaded();
     addNode(network, 0, battery);
     addNode(network, 1, load);
     addNode(network, 2, ground);
@@ -95,7 +97,7 @@ class PowerSolverTest {
     connectBidirectional(battery, 0, load, 0, WIRE_RESISTANCE);
     connectBidirectional(load, 1, ground, 0, WIRE_RESISTANCE);
     connectBidirectional(battery, 1, ground, 0, WIRE_RESISTANCE);
-    network.energyTick();
+    network.energyTick(network.getTimeStepSeconds());
 
     double expectedCurrent = SUPPLY_VOLTAGE / (5.0 + 3.0 * WIRE_RESISTANCE);
     assertEquals(expectedCurrent, network.getCurrentOver(battery, load, 0, 0), CURRENT_TOLERANCE);
@@ -166,9 +168,9 @@ class PowerSolverTest {
     PowerNetworkServer network = runCircuit(solver, source, load, ground);
     int solvesAfterFirstTick = solver.callCount();
 
-    network.energyTick();
+    network.energyTick(network.getTimeStepSeconds());
     int solvesAfterSecondTick = solver.callCount();
-    network.energyTick();
+    network.energyTick(network.getTimeStepSeconds());
 
     assertEquals(1, solvesAfterFirstTick, solverName + " should solve the static network on the first tick");
     assertEquals(2, solvesAfterSecondTick, solverName + " should perform one settling solve before sleeping");
@@ -195,7 +197,7 @@ class PowerSolverTest {
     connectBidirectional(series, 1, diode, 0, WIRE_RESISTANCE);
     connectBidirectional(diode, 1, ground, 0, WIRE_RESISTANCE);
 
-    network.energyTick();
+    network.energyTick(network.getTimeStepSeconds());
 
     assertTrue(solver.lastRequestedSubSteps() > 1,
         solverName + " nonlinear network should request internal transient substeps");
@@ -220,11 +222,11 @@ class PowerSolverTest {
     connectBidirectional(source, 1, ground, 0, WIRE_RESISTANCE);
 
     for (int i = 0; i < 12; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
     }
     int solvesAfterSettling = solver.callCount();
 
-    network.energyTick();
+    network.energyTick(network.getTimeStepSeconds());
 
     assertEquals(solvesAfterSettling, solver.callCount(),
         solverName + " settled dynamic-linear network should sleep until something changes");
@@ -248,13 +250,13 @@ class PowerSolverTest {
     connectBidirectional(load, 1, ground, 0, WIRE_RESISTANCE);
     connectBidirectional(source, 1, ground, 0, WIRE_RESISTANCE);
 
-    network.energyTick();
-    network.energyTick();
-    network.energyTick();
+    network.energyTick(network.getTimeStepSeconds());
+    network.energyTick(network.getTimeStepSeconds());
+    network.energyTick(network.getTimeStepSeconds());
     int solvesBeforeChange = solver.callCount();
 
     source.setVoltage(3.0);
-    network.energyTick();
+    network.energyTick(network.getTimeStepSeconds());
 
     assertTrue(solver.callCount() > solvesBeforeChange,
         solverName + " sleeping network should wake and solve after source voltage changes");
@@ -269,7 +271,8 @@ class PowerSolverTest {
     DiodeNode diode = new DiodeNode();
     GroundNode ground = new GroundNode();
 
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    PowerNetworkServer network = new PowerNetworkServer(solverFactory.get());
+    network.markLoaded();
     addNode(network, 0, source);
     addNode(network, 1, series);
     addNode(network, 2, diode);
@@ -279,7 +282,7 @@ class PowerSolverTest {
     connectBidirectional(series, 1, diode, 0, WIRE_RESISTANCE);
     connectBidirectional(diode, 1, ground, 0, WIRE_RESISTANCE);
     for (int i = 0; i < 20; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
     }
 
     double vd = network.getVoltageAt(diode, 0) - network.getVoltageAt(diode, 1);
@@ -300,7 +303,8 @@ class PowerSolverTest {
     DiodeNode diode = new DiodeNode();
     GroundNode ground = new GroundNode();
 
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    PowerNetworkServer network = new PowerNetworkServer(solverFactory.get());
+    network.markLoaded();
     addNode(network, 0, source);
     addNode(network, 1, series);
     addNode(network, 2, diode);
@@ -311,7 +315,7 @@ class PowerSolverTest {
     connectBidirectional(series, 1, diode, 1, WIRE_RESISTANCE);
     connectBidirectional(diode, 0, ground, 0, WIRE_RESISTANCE);
     for (int i = 0; i < 20; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
     }
 
     double id = Math.abs(network.getCurrentOver(series, diode, 1, 1));
@@ -328,7 +332,8 @@ class PowerSolverTest {
     NPNTransistorNode q = new NPNTransistorNode();
     GroundNode ground = new GroundNode();
 
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    PowerNetworkServer network = new PowerNetworkServer(solverFactory.get());
+    network.markLoaded();
     addNode(network, 0, vcc);
     addNode(network, 1, vb);
     addNode(network, 2, rc);
@@ -343,7 +348,7 @@ class PowerSolverTest {
     connectBidirectional(q, 2, ground, 0, WIRE_RESISTANCE);
 
     for (int i = 0; i < 50; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
     }
 
     double vbe = network.getVoltageAt(q, 0) - network.getVoltageAt(q, 2);
@@ -367,7 +372,8 @@ class PowerSolverTest {
     PNPTransistorNode q = new PNPTransistorNode();
     GroundNode ground = new GroundNode();
 
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    PowerNetworkServer network = new PowerNetworkServer(solverFactory.get());
+    network.markLoaded();
     addNode(network, 0, vcc);
     addNode(network, 1, vb);
     addNode(network, 2, rc);
@@ -382,7 +388,7 @@ class PowerSolverTest {
     connectBidirectional(rb, 1, q, 0, WIRE_RESISTANCE);
 
     for (int i = 0; i < 50; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
     }
 
     double veb = network.getVoltageAt(q, 2) - network.getVoltageAt(q, 0);
@@ -406,7 +412,8 @@ class PowerSolverTest {
     NMOSTransistorNode m = new NMOSTransistorNode();
     GroundNode ground = new GroundNode();
 
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    PowerNetworkServer network = new PowerNetworkServer(solverFactory.get());
+    network.markLoaded();
     addNode(network, 0, vcc);
     addNode(network, 1, vg);
     addNode(network, 2, rd);
@@ -419,7 +426,7 @@ class PowerSolverTest {
     connectBidirectional(m, 2, ground, 0, WIRE_RESISTANCE);
 
     for (int i = 0; i < 20; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
     }
 
     double vd = network.getVoltageAt(m, 0);
@@ -441,7 +448,8 @@ class PowerSolverTest {
     NMOSTransistorNode m = new NMOSTransistorNode();
     GroundNode ground = new GroundNode();
 
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    PowerNetworkServer network = new PowerNetworkServer(solverFactory.get());
+    network.markLoaded();
     addNode(network, 0, vcc);
     addNode(network, 1, vg);
     addNode(network, 2, rd);
@@ -454,7 +462,7 @@ class PowerSolverTest {
     connectBidirectional(m, 2, ground, 0, WIRE_RESISTANCE);
 
     for (int i = 0; i < 20; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
     }
 
     double vd = network.getVoltageAt(m, 0);
@@ -473,7 +481,8 @@ class PowerSolverTest {
     PMOSTransistorNode m = new PMOSTransistorNode();
     GroundNode ground = new GroundNode();
 
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solverFactory.get());
+    PowerNetworkServer network = new PowerNetworkServer(solverFactory.get());
+    network.markLoaded();
     addNode(network, 0, vcc);
     addNode(network, 1, vg);
     addNode(network, 2, rd);
@@ -486,7 +495,7 @@ class PowerSolverTest {
     connectBidirectional(vg, 0, m, 1, WIRE_RESISTANCE);
 
     for (int i = 0; i < 20; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
     }
 
     double vsg = network.getVoltageAt(m, 2) - network.getVoltageAt(m, 1);
@@ -566,7 +575,7 @@ class PowerSolverTest {
 
     double maxAbsVoltage = 0.0;
     for (int i = 0; i < 600; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
 
       maxAbsVoltage = Math.max(maxAbsVoltage, Math.abs(network.getVoltageAt(q1, 1)));
       maxAbsVoltage = Math.max(maxAbsVoltage, Math.abs(network.getVoltageAt(q2, 1)));
@@ -579,14 +588,15 @@ class PowerSolverTest {
   }
 
   private static PowerNetworkServer runCircuit(IPBSolver solver, FixedVoltageNode source, ResistorNode load, GroundNode ground) {
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solver);
+    PowerNetworkServer network = new PowerNetworkServer(solver);
+    network.markLoaded();
     addNode(network, 0, source);
     addNode(network, 1, load);
     addNode(network, 2, ground);
 
     connectBidirectional(source, 0, load, 0, WIRE_RESISTANCE);
     connectBidirectional(load, 1, ground, 0, WIRE_RESISTANCE);
-    network.energyTick();
+    network.energyTick(network.getTimeStepSeconds());
     return network;
   }
 
@@ -595,7 +605,8 @@ class PowerSolverTest {
     GroundNode ground = new GroundNode();
     ResistorNode[] resistors = new ResistorNode[sections];
 
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solver);
+    PowerNetworkServer network = new PowerNetworkServer(solver);
+    network.markLoaded();
     addNode(network, 0, source);
     for (int i = 0; i < sections; i++) {
       resistors[i] = new ResistorNode(sectionResistance);
@@ -609,11 +620,11 @@ class PowerSolverTest {
     }
     connectBidirectional(resistors[sections - 1], 1, ground, 0, WIRE_RESISTANCE);
 
-    network.energyTick();
+    network.energyTick(network.getTimeStepSeconds());
 
     long start = System.nanoTime();
     for (int i = 0; i < iterations; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
     }
     long elapsed = System.nanoTime() - start;
 
@@ -630,7 +641,8 @@ class PowerSolverTest {
 
     FixedVoltageNode source = new FixedVoltageNode(SUPPLY_VOLTAGE);
     GroundNode ground = new GroundNode();
-    PowerNetworkServer network = new PowerNetworkServer(null, null, solver);
+    PowerNetworkServer network = new PowerNetworkServer(solver);
+    network.markLoaded();
     addNode(network, 0, source);
     addNode(network, 1, sourceBus);
     addNode(network, 2, ground);
@@ -664,11 +676,11 @@ class PowerSolverTest {
       }
     }
 
-    network.energyTick();
+    network.energyTick(network.getTimeStepSeconds());
 
     long start = System.nanoTime();
     for (int i = 0; i < iterations; i++) {
-      network.energyTick();
+      network.energyTick(network.getTimeStepSeconds());
     }
     long elapsed = System.nanoTime() - start;
 

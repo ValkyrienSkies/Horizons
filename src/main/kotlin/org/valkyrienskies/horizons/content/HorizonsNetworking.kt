@@ -26,6 +26,10 @@ object HorizonsNetworking {
 
     init {
         var id = 0
+        NetworkingChannel.registerMessage(id++, org.valkyrienskies.horizons.impl.rigging.RigBodyPacket::class.java,
+            org.valkyrienskies.horizons.impl.rigging.RigBodyPacket::encode,
+            org.valkyrienskies.horizons.impl.rigging.RigBodyPacket::decode,
+            org.valkyrienskies.horizons.impl.rigging.RigBodyPacket::handle, Optional.of(NetworkDirection.PLAY_TO_CLIENT))
         //Client to Server
         NetworkingChannel.registerMessage(id++, ObjectGrabAdjustPacket::class.java,
             ObjectGrabAdjustPacket::encode, ObjectGrabAdjustPacket::decode, ObjectGrabAdjustPacket::handle,
