@@ -101,9 +101,20 @@ class LampBlock : ElectricalBlock(BlockBehaviour.Properties.of().strength(2f).no
     init { registerDefaultState(defaultBlockState().setValue(LIGHT, 0)) }
     override fun createBlockStateDefinition(builder: StateDefinition.Builder<Block, BlockState>) { super.createBlockStateDefinition(builder); builder.add(LIGHT) }
     override fun newBlockEntity(pos: BlockPos, state: BlockState) = LampBlockEntity(pos, state)
+    override fun getShape(state: BlockState, level: BlockGetter, pos: BlockPos, context: CollisionContext): VoxelShape = rotate(SHAPE, state)
     override fun <T : BlockEntity> getTicker(level: Level, state: BlockState, type: BlockEntityType<T>): BlockEntityTicker<T>? {
         if (level.isClientSide) return null
         return createTickerHelper(type, HorizonsBlockEntities.LAMP.get(), BlockEntityTicker { tickLevel, pos, tickState, lamp -> lamp.updateLight(tickLevel, pos, tickState) })
     }
-    companion object { @JvmField val LIGHT: IntegerProperty = IntegerProperty.create("light", 0, 15) }
+    companion object {
+        @JvmField val LIGHT: IntegerProperty = IntegerProperty.create("light", 0, 15)
+        private val SHAPE = Shapes.or(
+            Block.box(6.0, 0.0, 6.0, 10.0, 1.0, 10.0),
+            Block.box(5.0, 1.0, 5.0, 11.0, 4.0, 11.0),
+            Block.box(7.0, 4.0, 7.0, 9.0, 5.0, 9.0),
+            Block.box(3.0, 5.0, 3.0, 13.0, 11.0, 13.0),
+            Block.box(6.0, 2.0, 11.0, 7.0, 3.0, 12.0),
+            Block.box(9.0, 2.0, 11.0, 10.0, 3.0, 12.0)
+        )
+    }
 }

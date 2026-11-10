@@ -56,6 +56,29 @@ class SwitchBlockEntity(pos: BlockPos, state: BlockState) : ElectricalBlockEntit
 }
 class LampBlockEntity(pos: BlockPos, state: BlockState) : ElectricalBlockEntity(HorizonsBlockEntities.LAMP.get(), pos, state) {
     override fun createPowerNode() = ResistorNode(1.44)
+
+    override fun createSockets(): List<ISocket> {
+        val turns = when (blockState.getValue(BlockStateProperties.HORIZONTAL_FACING)) {
+            Direction.EAST -> 1
+            Direction.SOUTH -> 2
+            Direction.WEST -> 3
+            else -> 0
+        }
+        return (0..1).map { port ->
+            // The model's terminals protrude from the south face of the base.
+            val x = 6.0 + 3.0 * port
+            var bounds = AABBd(x / 16, 2.0 / 16, 11.0 / 16, (x + 1) / 16, 3.0 / 16, 12.0 / 16)
+            val center = Vector3d((x + 0.5) / 16, 2.5 / 16, 12.0 / 16)
+            val normal = Vector3d(0.0, 0.0, 1.0)
+            repeat(turns) {
+                bounds = AABBd(1 - bounds.maxZ, bounds.minY, bounds.minX, 1 - bounds.minZ, bounds.maxY, bounds.maxX)
+                center.set(1 - center.z, center.y, center.x)
+                normal.set(-normal.z, normal.y, normal.x)
+            }
+            StandardSocket(port, Int.MAX_VALUE, this, center, normal, bounds)
+        }
+    }
+
     fun updateLight(level: Level, pos: BlockPos, state: BlockState) {
         val node = powerNode as? ResistorNode ?: return
         val network = powerNetwork ?: return
