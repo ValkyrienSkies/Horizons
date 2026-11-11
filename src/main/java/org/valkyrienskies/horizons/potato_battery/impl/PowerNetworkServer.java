@@ -5,7 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import org.valkyrienskies.core.api.world.PhysLevel;
 import org.valkyrienskies.horizons.potato_battery.api.IPowerNetwork;
-import org.valkyrienskies.horizons.content.circuit.simulation.CompositePowerNode;
+import org.valkyrienskies.horizons.potato_battery.api.network.node.CompositePowerNode;
 import org.valkyrienskies.horizons.potato_battery.api.network.IPBSolver;
 import org.valkyrienskies.horizons.potato_battery.api.network.NodeEnergyData;
 import org.valkyrienskies.horizons.potato_battery.api.network.node.IPowerNode;

@@ -19,9 +19,9 @@ object HorizonsNetworking {
     @JvmStatic
     val NetworkingChannel: SimpleChannel = NetworkRegistry.newSimpleChannel(
         ResourceLocation.fromNamespaceAndPath(Horizons.MOD_ID, "main"),
-        Supplier { "2" },
-        "2"::equals,
-        "2"::equals
+        Supplier { "3" },
+        "3"::equals,
+        "3"::equals
     )
 
     init {

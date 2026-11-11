@@ -6,6 +6,7 @@ import java.util.stream.Stream;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.valkyrienskies.horizons.content.circuit.CircuitDesign.Placed;
@@ -26,6 +27,7 @@ import org.valkyrienskies.horizons.potato_battery.impl.nodes.VoltageSourceNode;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CircuitBoardSimulationTest {
+  @BeforeAll static void registerComponents() { BuiltinCircuitComponents.initialize(); }
   static Stream<Supplier<IPBSolver>> solvers() { return Stream.of(EJMLSolver::new, JKLUSolver::new); }
   private static PowerNetworkServer network(IPBSolver solver) {
     PowerNetworkServer network = new PowerNetworkServer(solver); network.markLoaded(); return network;
@@ -120,10 +122,10 @@ class CircuitBoardSimulationTest {
     archive.connect(attached.id(), 0, supply.id(), 0, 1e-6); archive.connect(attached.id(), 4, supply.id(), 1, 1e-6);
     settle(network);
     CircuitBoardNode board = (CircuitBoardNode) attached.node();
-    double voltage = board.writeState().getList("ComponentStates", 6).getDouble(0);
+    double voltage = board.writeState().getList("ComponentStates", 10).getCompound(0).getDouble("Voltage");
     assertEquals(5, voltage, 1e-3);
     board.setDesign(board.getDesign().withWire(wire(new Point(0, 0), new Point(0, 1))));
-    assertEquals(voltage, board.writeState().getList("ComponentStates", 6).getDouble(0));
+    assertEquals(voltage, board.writeState().getList("ComponentStates", 10).getCompound(0).getDouble("Voltage"));
     int activeCount = network.getNodes().size();
     long nextId = network.getNextNodeId();
     CompoundTag saved = archive.write(new CompoundTag());
@@ -133,7 +135,7 @@ class CircuitBoardSimulationTest {
       archive.activateChunk(PowerNetworkArchive.chunkOf(position));
       assertEquals(activeCount, network.getNodes().size());
       CircuitBoardNode restored = (CircuitBoardNode) network.getNode(attached.id());
-      assertEquals(voltage, restored.writeState().getList("ComponentStates", 6).getDouble(0));
+      assertEquals(voltage, restored.writeState().getList("ComponentStates", 10).getCompound(0).getDouble("Voltage"));
       assertTrue(restored.isConnected(supply.node(), 0, 0));
     }
     PowerNetworkServer restarted = network(solver.get());
@@ -142,7 +144,7 @@ class CircuitBoardSimulationTest {
     second.activateChunk(PowerNetworkArchive.chunkOf(position));
     assertTrue(restarted.getNextNodeId() > nextId);
     CircuitBoardNode restored = (CircuitBoardNode) restarted.getNode(attached.id());
-    assertEquals(voltage, restored.writeState().getList("ComponentStates", 6).getDouble(0));
+    assertEquals(voltage, restored.writeState().getList("ComponentStates", 10).getCompound(0).getDouble("Voltage"));
     second.activateChunk(PowerNetworkArchive.chunkOf(new BlockPos(32, 64, 0)));
     assertEquals(activeCount, restarted.getNodes().size());
     settle(restarted);
@@ -303,14 +305,14 @@ class CircuitBoardSimulationTest {
     long boardId = network.addNode(board); network.addNode(source);
     network.withState(() -> { connect(board, 0, source, 0); connect(board, 4, source, 1); return null; });
     settle(network);
-    double charged = board.writeState().getList("ComponentStates", 6).getDouble(1);
+    double charged = board.writeState().getList("ComponentStates", 10).getCompound(1).getDouble("Voltage");
     assertEquals(5 * (1 - Math.exp(-1)), charged, 0.04);
     CompoundTag encoded = PowerNodeTypes.encode(board);
     network.suspendNode(boardId);
     CircuitBoardNode restored = (CircuitBoardNode) PowerNodeTypes.decode(encoded);
     network.restoreNode(boardId, restored);
     settle(network);
-    assertEquals(charged, restored.writeState().getList("ComponentStates", 6).getDouble(1), 0.001);
+    assertEquals(charged, restored.writeState().getList("ComponentStates", 10).getCompound(1).getDouble("Voltage"), 0.001);
     assertEquals(0, source.getConnections().size());
   }
 }

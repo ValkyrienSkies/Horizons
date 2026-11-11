@@ -6,24 +6,26 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeAll;
 import org.valkyrienskies.horizons.content.circuit.CircuitDesign.Placed;
 import org.valkyrienskies.horizons.content.circuit.CircuitDesign.Point;
 import org.valkyrienskies.horizons.content.circuit.CircuitDesign.Wire;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CircuitDesignTest {
+  @BeforeAll static void registerComponents() { BuiltinCircuitComponents.initialize(); }
   @Test void immutableAndRoundtrips() {
     var parts = new ArrayList<Placed>();
     parts.add(new Placed("resistor", 2, 2, 0));
     CircuitDesign design = new CircuitDesign(parts, List.of(new Wire(new Point(2, 2), CircuitDesign.socket(0), 7)));
     parts.clear();
-    assertEquals(1, design.components().size());
-    assertThrows(UnsupportedOperationException.class, () -> design.components().clear());
-    assertThrows(UnsupportedOperationException.class, () -> design.wires().clear());
+    assertEquals(1, design.getComponents().size());
+    assertThrows(UnsupportedOperationException.class, () -> design.getComponents().clear());
+    assertThrows(UnsupportedOperationException.class, () -> design.getWires().clear());
     assertEquals(design, CircuitDesign.read(design.write()));
     assertEquals(CircuitDesign.empty(), CircuitDesign.read(CircuitDesign.empty().write()));
-    assertEquals(1, design.withoutWire(0).components().size());
-    assertEquals(1, design.withoutComponent(0).wires().size());
+    assertEquals(1, design.withoutWire(0).getComponents().size());
+    assertEquals(1, design.withoutComponent(0).getWires().size());
   }
 
   @Test void geometryAndClockwiseRotation() {
@@ -59,7 +61,7 @@ class CircuitDesignTest {
     assertDoesNotThrow(() -> design.withComponent(new Placed("resistor", 3, 5, 0)));
     assertThrows(IllegalArgumentException.class, () -> design.withWire(new Wire(new Point(5, 5), new Point(0, 0), 0)));
     assertThrows(IllegalArgumentException.class, () -> new CircuitDesign(java.util.Collections.nCopies(122, new Placed("resistor", 0, 0, 0)), List.of()));
-    assertEquals(121, new CircuitDesign(java.util.Collections.nCopies(121, new Placed("resistor", 0, 0, 0)), List.of()).components().size());
+    assertEquals(121, new CircuitDesign(java.util.Collections.nCopies(121, new Placed("resistor", 0, 0, 0)), List.of()).getComponents().size());
   }
 
   @Test void rejectsInvalidWiresButAllowsCrossingsAndEverySocket() {
@@ -70,14 +72,14 @@ class CircuitDesignTest {
     assertThrows(IllegalArgumentException.class, () -> design.withWire(new Wire(first, first, 0)));
     assertThrows(IllegalArgumentException.class, () -> design.withWire(new Wire(first, new Point(0, -1), 0)));
     assertThrows(IllegalArgumentException.class, () -> design.withWire(new Wire(first, second, 8)));
-    assertThrows(IllegalArgumentException.class, () -> design.withWire(new Wire(null, second, 0)));
+    assertThrows(NullPointerException.class, () -> new Wire(null, second, 0));
     assertDoesNotThrow(() -> design.withWire(new Wire(new Point(0, 10), new Point(10, 0), 1)));
     for (int index = 0; index < 8; index++) assertDoesNotThrow(CircuitDesign.empty().withWire(new Wire(first, CircuitDesign.socket(index), 0))::write);
     List<Wire> wires = new ArrayList<>();
     for (int start = 0; start < 121 && wires.size() < 513; start++)
       for (int end = start + 1; end < 121 && wires.size() < 513; end++)
         wires.add(new Wire(new Point(start % 11, start / 11), new Point(end % 11, end / 11), 0));
-    assertEquals(512, new CircuitDesign(List.of(), wires.subList(0, 512)).wires().size());
+    assertEquals(512, new CircuitDesign(List.of(), wires.subList(0, 512)).getWires().size());
     assertThrows(IllegalArgumentException.class, () -> new CircuitDesign(List.of(), wires));
   }
 

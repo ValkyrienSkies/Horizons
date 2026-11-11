@@ -1,7 +1,6 @@
-package org.valkyrienskies.horizons.content.circuit.simulation;
+package org.valkyrienskies.horizons.potato_battery.api.network.node;
 
 import java.util.List;
-import org.valkyrienskies.horizons.potato_battery.api.network.node.IPowerNode;
 import org.valkyrienskies.horizons.potato_battery.impl.PowerNetworkServer;
 
 public interface CompositePowerNode extends IPowerNode {
