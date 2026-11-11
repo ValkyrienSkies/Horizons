@@ -15,6 +15,7 @@ public class BatterySocketNode extends PowerNode {
   public @Nullable FiniteBatteryNode getBattery() { return battery; }
   public String getBatteryId() { return batteryId; }
   public boolean isConnected() { return connected; }
+  @Override public int getVoltageReferencePort() { return connected ? 1 : -1; }
   /** Restore charge without energizing the circuit before the physical attachment is verified. */
   public void retain(String id, FiniteBatteryNode cell) { batteryId = id; battery = cell; connected = false; }
   public void connect(String id, FiniteBatteryNode cell) { retain(id, cell); connected = true; }

@@ -27,6 +27,7 @@ public final class CircuitBoardNode extends PowerNode implements CompositePowerN
 
   public CircuitBoardNode(CircuitDesign design) { super(8); install(design); }
   public CircuitDesign getDesign() { return design; }
+  @Override public int[] getReferenceTraversalPorts(int enteredPort) { return new int[] {enteredPort}; }
   @Override public List<IPowerNode> getChildren() { return children; }
 
   public void setDesign(CircuitDesign replacement) {

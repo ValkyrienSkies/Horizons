@@ -14,6 +14,7 @@ public class VoltageSourceNode extends PowerNode {
   }
 
   public double getVoltage() { return voltage; }
+  @Override public int getVoltageReferencePort() { return 1; }
   @Override public int getVoltageSourceCount() { return 1; }
   @Override public void stamp(CircuitStampContext context) {
     context.stampVoltageSource(0, 0, 1, voltage);

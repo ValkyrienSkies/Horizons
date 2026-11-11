@@ -10,6 +10,7 @@ import org.valkyrienskies.horizons.potato_battery.api.network.NodeEnergyData;
 import org.valkyrienskies.horizons.potato_battery.api.network.node.IPowerNode;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -690,7 +691,7 @@ abstract class AbstractStampingSolver implements IPBSolver {
 
     @Override
     public double getPreviousVoltage(int port) {
-      return voltageForEquation(stateVector, equationForPort(port));
+      return voltageForEquation(stateVector, equationForPort(port)) - voltageForEquation(stateVector, topology.referenceEquation);
     }
 
     @Override
@@ -792,7 +793,7 @@ abstract class AbstractStampingSolver implements IPBSolver {
 
     private int equationForPort(int port) {
       if (port == GROUND) {
-        return -1;
+        return topology.referenceEquation;
       }
       if (port < 0 || port >= topology.portEquations.length) {
         throw new IllegalArgumentException("Invalid port " + port + " for node with " + topology.portEquations.length + " ports");
@@ -874,8 +875,40 @@ abstract class AbstractStampingSolver implements IPBSolver {
         }
       }
 
+      for (NodeTopology topology : nodeTopologies) {
+        if (topology.node.usesImplicitVoltageReference()) {
+          topology.referenceEquation = resolveReference(topology.node, nodeIds, nodeTopologies);
+        }
+      }
       return new SolveTopology(nodeTopologies, branches, nextEquation);
     }
+
+    private static int resolveReference(IPowerNode owner, IdentityHashMap<IPowerNode, Integer> nodeIds,
+        List<NodeTopology> topologies) {
+      ArrayDeque<ReferenceEndpoint> pending = new ArrayDeque<>();
+      IdentityHashMap<IPowerNode, java.util.BitSet> visited = new IdentityHashMap<>();
+      for (int port : owner.getReferenceTraversalPorts(-1)) pending.add(new ReferenceEndpoint(owner, port));
+      while (!pending.isEmpty()) {
+        ReferenceEndpoint endpoint = pending.remove();
+        IPowerNode node = endpoint.node;
+        Integer nodeId = nodeIds.get(node);
+        if (nodeId == null || endpoint.port < 0 || endpoint.port >= node.getPorts()) continue;
+        java.util.BitSet seen = visited.computeIfAbsent(node, ignored -> new java.util.BitSet());
+        if (seen.get(endpoint.port)) continue;
+        seen.set(endpoint.port);
+        int referencePort = node.getVoltageReferencePort();
+        if (referencePort >= 0 && referencePort < node.getPorts()) return topologies.get(nodeId).portEquations[referencePort];
+        for (int port : node.getReferenceTraversalPorts(endpoint.port)) {
+          if (port < 0 || port >= node.getPorts()) continue;
+          for (var connection : node.getConnections(port)) {
+            pending.add(new ReferenceEndpoint(connection.node(), connection.port()));
+          }
+        }
+      }
+      return -1;
+    }
+
+    private record ReferenceEndpoint(IPowerNode node, int port) {}
 
     private static BranchKey canonicalBranchKey(int ownerId, int ownerPort, int otherId, int otherPort) {
       long first = (((long) ownerId) << 32) | (ownerPort & 0xffffffffL);
@@ -889,6 +922,7 @@ abstract class AbstractStampingSolver implements IPBSolver {
     private final int[] portEquations;
     private final int sourceEquationBase;
     private final int sourceCount;
+    private int referenceEquation = -1;
 
     private NodeTopology(IPowerNode node, int[] portEquations, int sourceEquationBase, int sourceCount) {
       this.node = node;

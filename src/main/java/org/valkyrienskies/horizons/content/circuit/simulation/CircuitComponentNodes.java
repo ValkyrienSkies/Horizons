@@ -66,15 +66,17 @@ final class CircuitComponentNodes {
   static final class Gate extends PowerNode {
     private final boolean and;
     Gate(boolean and) { super(3); this.and = and; }
+    @Override public boolean usesImplicitVoltageReference() { return true; }
+    @Override public int[] getReferenceTraversalPorts(int enteredPort) { return new int[] {0, 1}; }
     @Override public PowerNodeSimulationMode getSimulationMode() { return PowerNodeSimulationMode.DYNAMIC_NONLINEAR; }
     @Override public void stamp(CircuitStampContext context) {
       boolean first = context.getPreviousVoltage(0) >= 2.5;
       boolean second = context.getPreviousVoltage(1) >= 2.5;
       double output = (and ? first && second : first || second) ? 5 : 0;
-      context.stampConductance(0, CircuitStampContext.GROUND, 1e-12);
-      context.stampConductance(1, CircuitStampContext.GROUND, 1e-12);
-      context.stampConductance(2, CircuitStampContext.GROUND, 0.1);
-      context.stampCurrentSource(CircuitStampContext.GROUND, 2, output * 0.1);
+      context.stampConductance(0, CircuitStampContext.GROUND, 1e-6);
+      context.stampConductance(1, CircuitStampContext.GROUND, 1e-6);
+      context.stampConductance(2, CircuitStampContext.GROUND, 100);
+      context.stampCurrentSource(CircuitStampContext.GROUND, 2, output * 100);
     }
   }
 }

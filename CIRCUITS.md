@@ -23,4 +23,8 @@ Existing installed components count toward the required materials. All missing c
 
 Circuit layouts and paper-slot contents persist across saves. Breaking the box in survival drops the box with its design and contents, rather than duplicating its components as separate drops. The network archive separately retains the live simulation state across chunk unloads.
 
-Component artwork and the editor use placeholder visuals. Electrical values are development defaults, not yet configurable: 1 kΩ resistors, 1 mF capacitors, and NMOS transistors with a 1 V threshold. Gates use implicit power/reference, a 2.5 V input threshold, and 0/5 V outputs. This is not intended to model a physically complete integrated circuit.
+Component artwork and the editor use placeholder visuals. Electrical values are development defaults, not yet configurable: 1 kΩ resistors, 1 mF capacitors, and NMOS transistors with a 1 V threshold. Gates use implicit power, a 2.5 V input threshold, 1 MΩ input pull-downs, and 0/5 V outputs through 0.01 Ω. This is not intended to model a physically complete integrated circuit.
+
+Gates automatically reference the negative terminal of the nearest source reachable through their input wiring (including through upstream gates), rather than the solver's arbitrary absolute zero. Connect the lamp/PDA return to that source's negative terminal. With multiple supplies, connect their negative terminals together for a shared logic reference. Separate sockets of a circuit box do not join otherwise independent reference networks. When no source is reachable, gates fall back to the simulation's implicit zero reference; undriven inputs are pulled low.
+
+For example, connect battery positive to both gate inputs, the output to lamp positive, and lamp negative to battery negative. Both OR and AND then produce about 4.97 V across the 1.44 Ω lamp. This is dimmer than powering the lamp directly from the 12 V battery; the gate's debug output is 5 V, not 12 V.

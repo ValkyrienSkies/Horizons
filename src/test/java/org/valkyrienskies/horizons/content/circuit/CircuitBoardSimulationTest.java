@@ -176,7 +176,7 @@ class CircuitBoardSimulationTest {
           else assertEquals(0, output, 1e-3);
         } else {
           boolean high = type.equals("and_gate") ? inputs == 3 : inputs != 0;
-          assertEquals(high ? 5.0 * 1000 / 1010 : 0, output, 0.01);
+          assertEquals(high ? 5.0 * 1000 / 1000.01 : 0, output, 0.01);
         }
         assertFalse(network.didLastSolveFail());
       }
@@ -190,12 +190,107 @@ class CircuitBoardSimulationTest {
     };
   }
 
+  @ParameterizedTest @MethodSource("solvers")
+  void gatesDriveLampRelativeToFloatingBatteryNegative(Supplier<IPBSolver> solver) {
+    for (String type : List.of("and_gate", "or_gate")) {
+      PowerNetworkServer network = network(solver.get());
+      Placed placed = new Placed(type, 5, 5, 0);
+      List<Point> pins = CircuitDesign.pins(placed);
+      CircuitBoardNode board = new CircuitBoardNode(new CircuitDesign(List.of(placed), List.of(
+          wire(CircuitDesign.socket(3), pins.get(0)), wire(CircuitDesign.socket(3), pins.get(1)),
+          wire(pins.get(2), CircuitDesign.socket(7)))));
+      VoltageSourceNode battery = new VoltageSourceNode(12);
+      ResistorNode lamp = new ResistorNode(1.44);
+      network.addNode(board); network.addNode(battery); network.addNode(lamp);
+      network.withState(() -> {
+        connect(battery, 0, board, 3); connect(board, 7, lamp, 0); connect(lamp, 1, battery, 1);
+        return null;
+      });
+      settle(network);
+      assertTrue(network.getVoltageBetween(lamp, 0, lamp, 1) > 4.9, type + " must drive the real lamp relative to battery negative");
+      assertTrue(lamp.getDissipatedPower(network) > 16);
+      assertFalse(network.didLastSolveFail());
+    }
+  }
+
   @Test void codecRejectsMalformedState() {
     CircuitBoardNode original = new CircuitBoardNode(twoTerminal("capacitor"));
     CircuitBoardNode decoded = (CircuitBoardNode) PowerNodeTypes.decode(PowerNodeTypes.encode(original));
     assertNotNull(decoded); assertEquals(original.getDesign(), decoded.getDesign());
     CompoundTag state = original.writeState(); state.remove("ComponentStates");
     assertThrows(IllegalArgumentException.class, () -> CircuitBoardNode.readState(state));
+  }
+
+  @ParameterizedTest @MethodSource("solvers")
+  void realBatteryGateTruthTablesIgnoreAbsoluteVoltageAndUnrelatedSockets(Supplier<IPBSolver> solver) {
+    for (String type : List.of("and_gate", "or_gate")) {
+      for (int inputs = 0; inputs < 4; inputs++) {
+        PowerNetworkServer network = network(solver.get());
+        Placed placed = new Placed(type, 5, 5, 0);
+        List<Point> pins = CircuitDesign.pins(placed);
+        CircuitBoardNode board = new CircuitBoardNode(new CircuitDesign(List.of(placed), List.of(
+            wire(CircuitDesign.socket(3), pins.get(0)), wire(CircuitDesign.socket(2), pins.get(1)),
+            wire(pins.get(2), CircuitDesign.socket(7)))));
+        VoltageSourceNode battery = new VoltageSourceNode(12);
+        VoltageSourceNode unrelated = new VoltageSourceNode(48);
+        PowerNode negativeOffset = grounded(-40);
+        PowerNode unrelatedOffset = grounded(100);
+        ResistorNode lamp = new ResistorNode(1.44);
+        for (IPowerNode node : List.of(board, battery, unrelated, negativeOffset, unrelatedOffset, lamp)) network.addNode(node);
+        int firstPort = (inputs & 1) != 0 ? 0 : 1;
+        int secondPort = (inputs & 2) != 0 ? 0 : 1;
+        network.withState(() -> {
+          connect(battery, firstPort, board, 3); connect(battery, secondPort, board, 2);
+          connect(board, 7, lamp, 0); connect(lamp, 1, battery, 1);
+          connect(battery, 1, negativeOffset, 0);
+          connect(unrelated, 0, board, 0); connect(unrelated, 1, unrelatedOffset, 0);
+          return null;
+        });
+        settle(network);
+        boolean high = type.equals("and_gate") ? inputs == 3 : inputs != 0;
+        assertEquals(high ? 5 * 1.44 / 1.45 : 0, network.getVoltageBetween(lamp, 0, lamp, 1), 0.001);
+        assertEquals(48, network.getVoltageBetween(unrelated, 0, unrelated, 1), 0.001);
+        assertFalse(network.didLastSolveFail());
+        assertFalse(network.wasLastIterationLimitHit());
+      }
+    }
+  }
+
+  @ParameterizedTest @MethodSource("solvers")
+  void cascadedGatesKeepBatteryReferenceAcrossArchiveReloadAndDisconnection(Supplier<IPBSolver> solver) {
+    PowerNetworkServer network = network(solver.get());
+    PowerNetworkArchive archive = new PowerNetworkArchive(network, () -> {});
+    Placed first = new Placed("or_gate", 3, 3, 0);
+    Placed second = new Placed("and_gate", 7, 7, 0);
+    var firstPins = CircuitDesign.pins(first);
+    var secondPins = CircuitDesign.pins(second);
+    CircuitDesign design = new CircuitDesign(List.of(first, second), List.of(
+        wire(CircuitDesign.socket(3), firstPins.get(0)), wire(firstPins.get(2), secondPins.get(0)),
+        wire(firstPins.get(2), secondPins.get(1)), wire(secondPins.get(2), CircuitDesign.socket(7))));
+    BlockPos position = new BlockPos(0, 64, 0);
+    var board = archive.attach(position, "test:circuit_box", -1, () -> new CircuitBoardNode(design));
+    var battery = archive.attach(new BlockPos(2, 64, 0), "test:battery", -1, () -> new VoltageSourceNode(12));
+    var lamp = archive.attach(new BlockPos(4, 64, 0), "test:lamp", -1, () -> new ResistorNode(1.44));
+    archive.connect(battery.id(), 0, board.id(), 3, 1e-6);
+    archive.connect(board.id(), 7, lamp.id(), 0, 1e-6);
+    archive.connect(lamp.id(), 1, battery.id(), 1, 1e-6);
+    settle(network);
+    assertTrue(network.getVoltageBetween(lamp.node(), 0, lamp.node(), 1) > 4.9);
+    CompoundTag saved = archive.write(new CompoundTag());
+    PowerNetworkServer restored = network(solver.get());
+    PowerNetworkArchive restoredArchive = new PowerNetworkArchive(restored, () -> {});
+    restoredArchive.read(saved);
+    restoredArchive.activateChunk(PowerNetworkArchive.chunkOf(position));
+    settle(restored);
+    IPowerNode restoredLamp = restored.getNode(lamp.id());
+    assertTrue(restored.getVoltageBetween(restoredLamp, 0, restoredLamp, 1) > 4.9);
+    restoredArchive.disconnect(battery.id(), 0, board.id(), 3);
+    settle(restored);
+    assertEquals(0, restored.getVoltageBetween(restoredLamp, 0, restoredLamp, 1), 0.001);
+    assertFalse(restored.didLastSolveFail());
+    restoredArchive.connect(battery.id(), 0, board.id(), 3, 1e-6);
+    settle(restored);
+    assertTrue(restored.getVoltageBetween(restoredLamp, 0, restoredLamp, 1) > 4.9);
   }
 
   @ParameterizedTest @MethodSource("solvers")

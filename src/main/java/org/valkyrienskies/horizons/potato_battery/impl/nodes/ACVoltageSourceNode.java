@@ -32,6 +32,7 @@ public class ACVoltageSourceNode extends PowerNode {
   public double getFrequencyHz() { return frequencyHz; }
   public double getPhaseCycles() { return phaseCycles; }
   public double getVoltage() { return peakVoltage * Math.sin(2 * Math.PI * phaseCycles); }
+  @Override public int getVoltageReferencePort() { return 1; }
 
   @Override public int getVoltageSourceCount() { return 1; }
   @Override public PowerNodeSimulationMode getSimulationMode() { return PowerNodeSimulationMode.DYNAMIC_LINEAR; }

@@ -48,6 +48,7 @@ public class FiniteBatteryNode extends PowerNode {
   }
 
   public double getMaxVoltage() { return maxVoltage; }
+  @Override public int getVoltageReferencePort() { return 1; }
   public double getMaxCurrent() { return maxCurrent; }
   public double getMaxEnergyJoules() { return maxEnergyJoules; }
   public double getInternalResistance() { return internalResistance; }

@@ -100,6 +100,14 @@ public interface IPowerNode {
 
   void stamp(CircuitStampContext context);
 
+  default int getVoltageReferencePort() { return -1; }
+
+  default boolean usesImplicitVoltageReference() { return false; }
+
+  default int[] getReferenceTraversalPorts(int enteredPort) {
+    return java.util.stream.IntStream.range(0, getPorts()).toArray();
+  }
+
   default PowerNodeSimulationMode getSimulationMode() {
     return PowerNodeSimulationMode.STATIC_LINEAR;
   }
